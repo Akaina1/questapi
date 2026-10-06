@@ -166,6 +166,21 @@ public final class QuestManagerImpl implements QuestManager {
     }
 
     @Override
+    public boolean failQuest(ServerPlayer player, Identifier questId) {
+        Quest quest = registry.getQuest(questId).orElse(null);
+        QuestProgress progress = dataFor(player).get(questId);
+        if (quest == null || progress == null || progress.state() != QuestState.ACTIVE) {
+            return false;
+        }
+        progress.setState(QuestState.FAILED);
+        markDirty();
+        for (QuestEventListener listener : QuestEvents.listeners()) {
+            listener.onQuestFailed(player, quest);
+        }
+        return true;
+    }
+
+    @Override
     public void resetQuest(ServerPlayer player, Identifier questId) {
         PlayerQuestData data = dataFor(player);
         data.progress().remove(questId);
@@ -211,6 +226,9 @@ public final class QuestManagerImpl implements QuestManager {
         }
         List<ObjectiveDefinition> objectives = quest.objectives();
         if (objectiveIndex < 0 || objectiveIndex >= objectives.size()) {
+            return false;
+        }
+        if (!progress.objectiveUnlocked(quest, objectiveIndex)) {
             return false;
         }
         ObjectiveDefinition definition = objectives.get(objectiveIndex);
@@ -343,6 +361,9 @@ public final class QuestManagerImpl implements QuestManager {
             }
             List<ObjectiveDefinition> objectives = quest.objectives();
             for (int i = 0; i < objectives.size(); i++) {
+                if (!progress.objectiveUnlocked(quest, i)) {
+                    break;
+                }
                 ObjectiveDefinition definition = objectives.get(i);
                 ObjectiveProgress op = progress.objective(i);
                 int previous = op.current();

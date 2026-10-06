@@ -66,6 +66,24 @@ public final class QuestProgress {
         return objectives.computeIfAbsent(index, i -> ObjectiveProgress.empty());
     }
 
+    /**
+     * Whether objective {@code index} is currently open for progress. Always {@code true} unless the
+     * quest is {@link Quest#sequential()}, in which case every earlier objective must be complete.
+     * Read-only, so it is safe to call from the client GUI as well as the server.
+     */
+    public boolean objectiveUnlocked(Quest quest, int index) {
+        if (!quest.sequential()) {
+            return true;
+        }
+        for (int i = 0; i < index; i++) {
+            ObjectiveProgress previous = objectives.get(i);
+            if (previous == null || !previous.complete()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     public long startedAt() {
         return startedAt;
     }

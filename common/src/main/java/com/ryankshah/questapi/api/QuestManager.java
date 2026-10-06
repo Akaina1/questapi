@@ -62,6 +62,13 @@ public interface QuestManager {
     boolean abandonQuest(ServerPlayer player, Identifier questId);
 
     /**
+     * Fails an {@code ACTIVE} quest, moving it to {@code FAILED} and keeping its objective progress
+     * for display. No-op (returns {@code false}) if the quest is not active. A failed quest only
+     * leaves that state through {@link #resetQuest}.
+     */
+    boolean failQuest(ServerPlayer player, Identifier questId);
+
+    /**
      * Fully resets a quest to {@code LOCKED}/{@code AVAILABLE} regardless of its current state,
      * discarding all progress and reward-claim status. Intended for dev-mode tooling.
      */

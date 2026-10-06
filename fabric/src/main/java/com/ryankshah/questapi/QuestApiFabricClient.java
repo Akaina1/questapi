@@ -29,7 +29,7 @@ public class QuestApiFabricClient implements ClientModInitializer {
                 "key.questapi.open_quests", InputConstants.Type.KEYBOARD, InputConstants.KEY_K, KeyMapping.Category.MISC));
 
         ClientPlayNetworking.registerGlobalReceiver(ClientboundSyncDefinitionsPayload.TYPE,
-                (payload, context) -> ClientQuestNetworking.handleSyncDefinitions(payload.categories(), payload.quests()));
+                (payload, context) -> ClientQuestNetworking.handleSyncDefinitions(payload));
         ClientPlayNetworking.registerGlobalReceiver(ClientboundSyncProgressPayload.TYPE,
                 (payload, context) -> ClientQuestNetworking.handleSyncProgress(payload.data()));
         ClientPlayNetworking.registerGlobalReceiver(ClientboundQuestCompletedPayload.TYPE,

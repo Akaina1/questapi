@@ -23,6 +23,7 @@ public final class QuestGuiText {
                     ? Component.translatable("questapi.gui.state.rewarded.repeatable")
                     : Component.translatable("questapi.gui.state.rewarded");
             case ABANDONED -> Component.translatable("questapi.gui.state.abandoned");
+            case FAILED -> Component.translatable("questapi.gui.state.failed");
         };
     }
 
@@ -36,6 +37,7 @@ public final class QuestGuiText {
             case ACTIVE -> 0xFFFFD83C;
             case COMPLETED -> 0xFFFFAA00;
             case REWARDED -> 0xFF55C4FF;
+            case FAILED -> 0xFFFF5555;
         };
     }
 }

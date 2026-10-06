@@ -23,7 +23,11 @@ package com.ryankshah.questapi.api.quest;
  *     <li>{@link #ABANDONED} - the player cancelled an in-progress quest. Functionally equivalent to
  *     {@link #AVAILABLE} (or {@link #LOCKED} if prerequisites regressed) but preserved as a distinct
  *     state for UI/analytics purposes.</li>
+ *     <li>{@link #FAILED} - the quest was failed by code calling {@code QuestManager#failQuest}
+ *     (for example a timer running out or a quest giver dying). Objective progress is kept for
+ *     display. The quest only leaves this state via an explicit reset.</li>
  * </ul>
+ * New values are only ever appended, so anything that stores or sends the ordinal stays valid.
  */
 public enum QuestState {
     LOCKED,
@@ -31,5 +35,6 @@ public enum QuestState {
     ACTIVE,
     COMPLETED,
     REWARDED,
-    ABANDONED
+    ABANDONED,
+    FAILED
 }

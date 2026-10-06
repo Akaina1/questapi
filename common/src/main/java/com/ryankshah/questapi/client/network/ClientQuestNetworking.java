@@ -1,9 +1,8 @@
 package com.ryankshah.questapi.client.network;
 
 import com.ryankshah.questapi.api.quest.PlayerQuestData;
-import com.ryankshah.questapi.api.quest.Quest;
-import com.ryankshah.questapi.api.quest.QuestCategory;
 import com.ryankshah.questapi.client.ClientQuestDataCache;
+import com.ryankshah.questapi.impl.network.payload.ClientboundSyncDefinitionsPayload;
 import com.ryankshah.questapi.impl.network.payload.ServerboundAbandonQuestPayload;
 import com.ryankshah.questapi.impl.network.payload.ServerboundClaimRewardPayload;
 import com.ryankshah.questapi.impl.network.payload.ServerboundDeliverItemsPayload;
@@ -17,8 +16,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.sounds.SoundEvents;
 
-import java.util.List;
-
 /**
  * Client-side packet handling logic and outgoing request helpers, shared by both loaders. Loader
  * modules register these methods as the handler bodies for their own client payload registration.
@@ -28,8 +25,8 @@ public final class ClientQuestNetworking {
     private ClientQuestNetworking() {
     }
 
-    public static void handleSyncDefinitions(List<QuestCategory> categories, List<Quest> quests) {
-        ClientQuestDataCache.INSTANCE.setDefinitions(categories, quests);
+    public static void handleSyncDefinitions(ClientboundSyncDefinitionsPayload payload) {
+        ClientQuestDataCache.INSTANCE.setDefinitions(payload.categories(), payload.quests(), payload.manualActions());
     }
 
     public static void handleSyncProgress(PlayerQuestData data) {

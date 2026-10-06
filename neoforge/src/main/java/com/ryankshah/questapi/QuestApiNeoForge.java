@@ -56,7 +56,7 @@ public class QuestApiNeoForge {
     private void registerPayloads(RegisterPayloadHandlersEvent event) {
         PayloadRegistrar registrar = event.registrar("1");
         registrar.playToClient(ClientboundSyncDefinitionsPayload.TYPE, ClientboundSyncDefinitionsPayload.STREAM_CODEC,
-                (payload, context) -> com.ryankshah.questapi.client.network.ClientQuestNetworking.handleSyncDefinitions(payload.categories(), payload.quests()));
+                (payload, context) -> com.ryankshah.questapi.client.network.ClientQuestNetworking.handleSyncDefinitions(payload));
         registrar.playToClient(ClientboundSyncProgressPayload.TYPE, ClientboundSyncProgressPayload.STREAM_CODEC,
                 (payload, context) -> com.ryankshah.questapi.client.network.ClientQuestNetworking.handleSyncProgress(payload.data()));
         registrar.playToClient(ClientboundQuestCompletedPayload.TYPE, ClientboundQuestCompletedPayload.STREAM_CODEC,

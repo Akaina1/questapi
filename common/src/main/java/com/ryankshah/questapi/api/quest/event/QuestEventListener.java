@@ -42,6 +42,12 @@ public interface QuestEventListener {
     default void onRewardClaimed(ServerPlayer player, Quest quest) {
     }
 
+    /**
+     * Fired when an {@code ACTIVE} quest is failed through {@code QuestManager#failQuest}.
+     */
+    default void onQuestFailed(ServerPlayer player, Quest quest) {
+    }
+
     default void onQuestReset(ServerPlayer player, Quest quest) {
     }
 }

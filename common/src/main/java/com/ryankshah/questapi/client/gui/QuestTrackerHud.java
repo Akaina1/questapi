@@ -52,13 +52,18 @@ public final class QuestTrackerHud {
 
         List<FormattedCharSequence> titleLines = font.split(quest.title(), WIDTH);
         List<List<FormattedCharSequence>> objectiveLines = new ArrayList<>();
+        List<Integer> shownObjectives = new ArrayList<>();
         List<ObjectiveDefinition> objectives = quest.objectives();
         for (int i = 0; i < objectives.size(); i++) {
+            if (!progress.objectiveUnlocked(quest, i)) {
+                break;
+            }
             ObjectiveDefinition objective = objectives.get(i);
             ObjectiveProgress op = progress.objectives().getOrDefault(i, ObjectiveProgress.empty());
             String amountText = " (" + op.current() + "/" + objective.targetAmount() + ")";
             Component line = objective.describe().copy().append(Component.literal(amountText));
             objectiveLines.add(font.split(line, WIDTH));
+            shownObjectives.add(i);
         }
 
         int contentHeight = titleLines.size() * LINE_HEIGHT + 2;
@@ -79,11 +84,12 @@ public final class QuestTrackerHud {
         }
         cursorY += 2;
 
-        for (int i = 0; i < objectives.size(); i++) {
+        for (int shown = 0; shown < shownObjectives.size(); shown++) {
+            int i = shownObjectives.get(shown);
             ObjectiveDefinition objective = objectives.get(i);
             ObjectiveProgress op = progress.objectives().getOrDefault(i, ObjectiveProgress.empty());
             int color = op.complete() ? 0xFF55FF55 : 0xFFDDDDDD;
-            for (FormattedCharSequence line : objectiveLines.get(i)) {
+            for (FormattedCharSequence line : objectiveLines.get(shown)) {
                 graphics.text(font, line, x, cursorY, color);
                 cursorY += LINE_HEIGHT;
             }

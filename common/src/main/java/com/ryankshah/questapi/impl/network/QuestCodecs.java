@@ -71,8 +71,9 @@ public final class QuestCodecs {
                 Codec.BOOL.optionalFieldOf("repeatable", false).forGetter(Quest::repeatable),
                 Codec.STRING.xmap(ResetMode::valueOf, Enum::name).optionalFieldOf("reset_mode")
                         .forGetter(q -> Optional.ofNullable(q.resetMode())),
-                Codec.INT.optionalFieldOf("reset_amount", 0).forGetter(Quest::resetAmount)
-        ).apply(instance, (id, title, description, icon, category, objectives, rewards, prerequisites, autoActivate, sortOrder, repeatable, resetMode, resetAmount) -> {
+                Codec.INT.optionalFieldOf("reset_amount", 0).forGetter(Quest::resetAmount),
+                Codec.BOOL.optionalFieldOf("sequential", false).forGetter(Quest::sequential)
+        ).apply(instance, (id, title, description, icon, category, objectives, rewards, prerequisites, autoActivate, sortOrder, repeatable, resetMode, resetAmount, sequential) -> {
             Quest.Builder builder = Quest.builder(id)
                     .title(title)
                     .description(description)
@@ -82,7 +83,8 @@ public final class QuestCodecs {
                     .rewards(rewards)
                     .requires(prerequisites)
                     .autoActivate(autoActivate)
-                    .sortOrder(sortOrder);
+                    .sortOrder(sortOrder)
+                    .sequential(sequential);
             if (repeatable) {
                 builder.repeatable(resetMode.orElse(null), resetAmount);
             }

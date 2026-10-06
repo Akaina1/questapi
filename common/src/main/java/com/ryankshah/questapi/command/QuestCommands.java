@@ -39,6 +39,12 @@ public final class QuestCommands {
                                         .executes(ctx -> resetQuest(ctx.getSource(),
                                                 EntityArgument.getPlayer(ctx, "player"),
                                                 IdentifierArgument.getId(ctx, "quest"))))))
+                .then(Commands.literal("fail")
+                        .then(Commands.argument("player", EntityArgument.player())
+                                .then(Commands.argument("quest", IdentifierArgument.id())
+                                        .executes(ctx -> failQuest(ctx.getSource(),
+                                                EntityArgument.getPlayer(ctx, "player"),
+                                                IdentifierArgument.getId(ctx, "quest"))))))
                 .then(Commands.literal("unlock")
                         .then(Commands.argument("player", EntityArgument.player())
                                 .then(Commands.argument("quest", IdentifierArgument.id())
@@ -62,6 +68,15 @@ public final class QuestCommands {
         QuestApi.manager().resetQuest(player, questId);
         QuestNetworking.sendProgress(player);
         source.sendSuccess(() -> Component.literal("Reset quest " + questId + " for " + player.getName().getString()), true);
+        return 1;
+    }
+
+    private static int failQuest(CommandSourceStack source, ServerPlayer player, Identifier questId) {
+        if (!QuestApi.manager().failQuest(player, questId)) {
+            source.sendFailure(Component.literal("Quest " + questId + " is not active for " + player.getName().getString()));
+            return 0;
+        }
+        source.sendSuccess(() -> Component.literal("Failed quest " + questId + " for " + player.getName().getString()), true);
         return 1;
     }
 

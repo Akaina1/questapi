@@ -1,7 +1,9 @@
 package com.ryankshah.questapi.impl.network;
 
 import com.ryankshah.questapi.QuestApi;
+import com.ryankshah.questapi.api.quest.ManualQuestActions;
 import com.ryankshah.questapi.api.quest.Quest;
+import com.ryankshah.questapi.impl.DevConfig;
 import com.ryankshah.questapi.impl.network.payload.ClientboundQuestCompletedPayload;
 import com.ryankshah.questapi.impl.network.payload.ClientboundQuestUnlockedPayload;
 import com.ryankshah.questapi.impl.network.payload.ClientboundSyncDefinitionsPayload;
@@ -24,7 +26,9 @@ public final class QuestNetworking {
     public static void sendDefinitions(ServerPlayer player) {
         Services.NETWORK.sendToPlayer(player, new ClientboundSyncDefinitionsPayload(
                 List.copyOf(QuestApi.registry().categories()),
-                List.copyOf(QuestApi.registry().quests())
+                List.copyOf(QuestApi.registry().quests()),
+                new ManualQuestActions(DevConfig.allowManualStart(), DevConfig.allowManualAbandon(),
+                        DevConfig.allowManualClaim(), DevConfig.allowManualDeliver())
         ));
     }
 
@@ -56,26 +60,47 @@ public final class QuestNetworking {
     }
 
     public static void handleStartQuest(ServerPlayer player, Identifier questId) {
+        if (!DevConfig.allowManualStart()) {
+            logBlocked("start", player, questId);
+            return;
+        }
         if (QuestApi.manager().startQuest(player, questId)) {
             sendProgress(player);
         }
     }
 
     public static void handleAbandonQuest(ServerPlayer player, Identifier questId) {
+        if (!DevConfig.allowManualAbandon()) {
+            logBlocked("abandon", player, questId);
+            return;
+        }
         if (QuestApi.manager().abandonQuest(player, questId)) {
             sendProgress(player);
         }
     }
 
     public static void handleClaimReward(ServerPlayer player, Identifier questId) {
+        if (!DevConfig.allowManualClaim()) {
+            logBlocked("claim", player, questId);
+            return;
+        }
         if (QuestApi.manager().claimRewards(player, questId)) {
             sendProgress(player);
         }
     }
 
     public static void handleDeliverItems(ServerPlayer player, Identifier questId, int objectiveIndex, int amount) {
+        if (!DevConfig.allowManualDeliver()) {
+            logBlocked("deliver", player, questId);
+            return;
+        }
         if (QuestApi.manager().deliverItems(player, questId, objectiveIndex, amount)) {
             sendProgress(player);
         }
+    }
+
+    private static void logBlocked(String action, ServerPlayer player, Identifier questId) {
+        QuestApi.LOG.debug("Ignored manual quest {} of {} from {}: disabled in questapi.properties",
+                action, questId, player.getName().getString());
     }
 }

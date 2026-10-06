@@ -1,5 +1,6 @@
 package com.ryankshah.questapi.client;
 
+import com.ryankshah.questapi.api.quest.ManualQuestActions;
 import com.ryankshah.questapi.api.quest.PlayerQuestData;
 import com.ryankshah.questapi.api.quest.Quest;
 import com.ryankshah.questapi.api.quest.QuestCategory;
@@ -24,6 +25,7 @@ public final class ClientQuestDataCache {
 
     private List<QuestCategory> categories = List.of();
     private List<Quest> quests = List.of();
+    private ManualQuestActions manualActions = ManualQuestActions.ALL;
     private PlayerQuestData progress;
     private int revision = 0;
     private Identifier trackedQuestId;
@@ -39,10 +41,19 @@ public final class ClientQuestDataCache {
         return revision;
     }
 
-    public void setDefinitions(List<QuestCategory> categories, List<Quest> quests) {
+    public void setDefinitions(List<QuestCategory> categories, List<Quest> quests, ManualQuestActions manualActions) {
         this.categories = categories;
         this.quests = quests;
+        this.manualActions = manualActions;
         this.revision++;
+    }
+
+    /**
+     * Which book actions the server currently allows. Defaults to everything allowed until the
+     * first definitions sync arrives.
+     */
+    public ManualQuestActions manualActions() {
+        return manualActions;
     }
 
     public void setProgress(PlayerQuestData progress) {
@@ -53,6 +64,7 @@ public final class ClientQuestDataCache {
     public void clear() {
         this.categories = List.of();
         this.quests = List.of();
+        this.manualActions = ManualQuestActions.ALL;
         this.progress = null;
         this.revision++;
     }

@@ -1,5 +1,6 @@
 package com.ryankshah.questapi.client.gui;
 
+import com.ryankshah.questapi.api.quest.ManualQuestActions;
 import com.ryankshah.questapi.api.quest.Quest;
 import com.ryankshah.questapi.api.quest.QuestCategory;
 import com.ryankshah.questapi.api.quest.QuestProgress;
@@ -28,7 +29,9 @@ import java.util.List;
  * quest state itself, it only displays whatever the server last synced and sends request payloads
  * for player actions.
  * <p>
- * Three-column layout: a scrollable category sidebar, a scrollable quest list, and a detail panel.
+ * A row of state tabs (Ongoing / Completed / Failed, plus Available when manual start is allowed)
+ * sits above a three-column layout: a scrollable category sidebar, a scrollable quest list, and a
+ * detail panel.
  * The panel size adapts to the window so it never exceeds the screen, and every column scrolls or
  * word-wraps instead of overflowing its bounds.
  */
@@ -41,7 +44,44 @@ public final class QuestScreen extends Screen {
     private static final int LINE_HEIGHT = 10;
     private static final int PROGRESS_BAR_HEIGHT = 3;
 
+    private static final int TAB_HEIGHT = 20;
+    private static final int TAB_GAP = 2;
+
+    /**
+     * Top-level filter over quest states. {@code AVAILABLE} is only offered when the server lets
+     * players start quests from the book; otherwise quests that are not yet started stay hidden.
+     */
+    private enum Tab {
+        ONGOING("questapi.gui.tab.ongoing", QuestState.ACTIVE, QuestState.COMPLETED),
+        COMPLETED("questapi.gui.tab.completed", QuestState.REWARDED),
+        FAILED("questapi.gui.tab.failed", QuestState.FAILED),
+        AVAILABLE("questapi.gui.tab.available", QuestState.AVAILABLE, QuestState.LOCKED, QuestState.ABANDONED);
+
+        private final String translationKey;
+        private final List<QuestState> states;
+
+        Tab(String translationKey, QuestState... states) {
+            this.translationKey = translationKey;
+            this.states = List.of(states);
+        }
+
+        boolean matches(QuestState state) {
+            return states.contains(state);
+        }
+    }
+
+    private static Tab[] visibleTabs(boolean includeAvailable) {
+        return includeAvailable
+                ? new Tab[]{Tab.AVAILABLE, Tab.ONGOING, Tab.COMPLETED, Tab.FAILED}
+                : new Tab[]{Tab.ONGOING, Tab.COMPLETED, Tab.FAILED};
+    }
+
     private final ClientQuestDataCache cache = ClientQuestDataCache.INSTANCE;
+    private Tab selectedTab = Tab.ONGOING;
+    private final List<Button> tabButtons = new ArrayList<>();
+    private boolean tabsIncludeAvailable;
+    private int columnY;
+    private int columnHeight;
     private int leftPos;
     private int topPos;
     private int panelWidth;
@@ -77,12 +117,11 @@ public final class QuestScreen extends Screen {
         this.leftPos = (this.width - panelWidth) / 2;
         this.topPos = (this.height - panelHeight) / 2;
 
-        int columnY = topPos + MARGIN;
-        int columnHeight = panelHeight - 2 * MARGIN;
+        this.columnY = topPos + MARGIN + TAB_HEIGHT + MARGIN;
+        this.columnHeight = topPos + panelHeight - MARGIN - columnY;
 
         int categoryX = leftPos + MARGIN;
         categoryList = new CategoryListWidget(minecraft, categoryX, columnY, CATEGORY_WIDTH, columnHeight, this::selectCategory);
-        categoryList.setCategories(cache.categories(), cache);
         addRenderableWidget(categoryList);
 
         int listX = categoryX + CATEGORY_WIDTH + GAP;
@@ -93,30 +132,84 @@ public final class QuestScreen extends Screen {
         this.detailY = columnY + 4;
         this.detailWidth = leftPos + panelWidth - MARGIN - detailX;
 
-        if (selectedCategory == null && !cache.categories().isEmpty()) {
-            selectedCategory = cache.categories().get(0).id();
-        }
-        refreshQuestList();
+        layoutTabs();
+        refreshLists();
+        refreshActionButton();
         lastSeenRevision = cache.revision();
+    }
+
+    private void layoutTabs() {
+        for (Button button : tabButtons) {
+            removeWidget(button);
+        }
+        tabButtons.clear();
+
+        tabsIncludeAvailable = cache.manualActions().start();
+        if (!tabsIncludeAvailable && selectedTab == Tab.AVAILABLE) {
+            selectedTab = Tab.ONGOING;
+        }
+        Tab[] tabs = visibleTabs(tabsIncludeAvailable);
+        int totalWidth = panelWidth - 2 * MARGIN;
+        int tabWidth = (totalWidth - (tabs.length - 1) * TAB_GAP) / tabs.length;
+        int tabY = topPos + MARGIN;
+        for (int i = 0; i < tabs.length; i++) {
+            Tab tab = tabs[i];
+            Button button = Button.builder(Component.translatable(tab.translationKey), b -> selectTab(tab))
+                    .bounds(leftPos + MARGIN + i * (tabWidth + TAB_GAP), tabY, tabWidth, TAB_HEIGHT).build();
+            button.active = tab != selectedTab;
+            tabButtons.add(button);
+            addRenderableWidget(button);
+        }
+    }
+
+    private void selectTab(Tab tab) {
+        this.selectedTab = tab;
+        this.selectedQuest = null;
+        layoutTabs();
+        refreshLists();
+        refreshActionButton();
+    }
+
+    private List<Quest> questsInTab(Identifier categoryId) {
+        return cache.questsInCategory(categoryId).stream()
+                .filter(quest -> selectedTab.matches(cache.getState(quest.id())))
+                .toList();
+    }
+
+    /**
+     * Rebuilds the category sidebar and quest list for the current tab. Categories with nothing to
+     * show in this tab are dropped so the player never lands on an empty list.
+     */
+    private void refreshLists() {
+        List<QuestCategory> visible = cache.categories().stream()
+                .filter(category -> !questsInTab(category.id()).isEmpty())
+                .toList();
+        categoryList.setCategories(visible, cache);
+
+        if (selectedCategory == null || visible.stream().noneMatch(category -> category.id().equals(selectedCategory))) {
+            selectedCategory = visible.isEmpty() ? null : visible.get(0).id();
+            selectedQuest = null;
+        }
+
+        List<Quest> quests = selectedCategory == null ? List.of() : questsInTab(selectedCategory);
+        questList.setQuests(quests, cache);
+
+        if (selectedQuest != null) {
+            Identifier selectedId = selectedQuest.id();
+            selectedQuest = quests.stream().filter(quest -> quest.id().equals(selectedId)).findFirst().orElse(null);
+        }
     }
 
     private void selectCategory(QuestCategory category) {
         this.selectedCategory = category.id();
         this.selectedQuest = null;
-        refreshQuestList();
+        refreshLists();
         refreshActionButton();
     }
 
     private void selectQuest(Quest quest) {
         this.selectedQuest = quest;
         refreshActionButton();
-    }
-
-    private void refreshQuestList() {
-        if (selectedCategory == null) {
-            return;
-        }
-        questList.setQuests(cache.questsInCategory(selectedCategory), cache);
     }
 
     private void refreshActionButton() {
@@ -132,27 +225,40 @@ public final class QuestScreen extends Screen {
             return;
         }
         QuestState state = cache.getState(selectedQuest.id());
+        ManualQuestActions allowed = cache.manualActions();
         int buttonY = topPos + panelHeight - MARGIN - 20;
 
         switch (state) {
-            case AVAILABLE -> actionButton = Button.builder(Component.translatable("questapi.gui.action.start"),
-                            b -> ClientQuestNetworking.requestStartQuest(selectedQuest.id()))
-                    .bounds(detailX, buttonY, detailWidth, 20).build();
+            case AVAILABLE -> {
+                if (allowed.start()) {
+                    actionButton = Button.builder(Component.translatable("questapi.gui.action.start"),
+                                    b -> ClientQuestNetworking.requestStartQuest(selectedQuest.id()))
+                            .bounds(detailX, buttonY, detailWidth, 20).build();
+                }
+            }
             case ACTIVE -> {
-                actionButton = Button.builder(Component.translatable("questapi.gui.action.abandon"),
-                                b -> confirmAbandon(selectedQuest.id()))
-                        .bounds(detailX, buttonY, detailWidth, 20).build();
+                int trackY = buttonY;
+                if (allowed.abandon()) {
+                    actionButton = Button.builder(Component.translatable("questapi.gui.action.abandon"),
+                                    b -> confirmAbandon(selectedQuest.id()))
+                            .bounds(detailX, buttonY, detailWidth, 20).build();
+                    trackY = buttonY - 22;
+                }
                 boolean tracked = selectedQuest.id().equals(cache.trackedQuestId());
                 Component trackLabel = Component.translatable(tracked ? "questapi.gui.action.untrack" : "questapi.gui.action.track");
                 trackButton = Button.builder(trackLabel, b -> {
                             cache.toggleTracked(selectedQuest.id());
                             refreshActionButton();
                         })
-                        .bounds(detailX, buttonY - 22, detailWidth, 20).build();
+                        .bounds(detailX, trackY, detailWidth, 20).build();
             }
-            case COMPLETED -> actionButton = Button.builder(Component.translatable("questapi.gui.action.claim"),
-                            b -> ClientQuestNetworking.requestClaimReward(selectedQuest.id()))
-                    .bounds(detailX, buttonY, detailWidth, 20).build();
+            case COMPLETED -> {
+                if (allowed.claim()) {
+                    actionButton = Button.builder(Component.translatable("questapi.gui.action.claim"),
+                                    b -> ClientQuestNetworking.requestClaimReward(selectedQuest.id()))
+                            .bounds(detailX, buttonY, detailWidth, 20).build();
+                }
+            }
             default -> {
             }
         }
@@ -180,8 +286,10 @@ public final class QuestScreen extends Screen {
     public void tick() {
         if (cache.revision() != lastSeenRevision) {
             lastSeenRevision = cache.revision();
-            categoryList.setCategories(cache.categories(), cache);
-            refreshQuestList();
+            if (tabsIncludeAvailable != cache.manualActions().start()) {
+                layoutTabs();
+            }
+            refreshLists();
             refreshActionButton();
         }
     }
@@ -194,8 +302,6 @@ public final class QuestScreen extends Screen {
 
         // One consistent flat background behind all three columns, drawn before the list widgets so
         // it shows through as their backdrop instead of the mismatched vanilla list textures.
-        int columnY = topPos + MARGIN;
-        int columnHeight = panelHeight - 2 * MARGIN;
         int categoryX = leftPos + MARGIN;
         int listX = categoryX + CATEGORY_WIDTH + GAP;
         graphics.fill(categoryX, columnY, categoryX + CATEGORY_WIDTH, columnY + columnHeight, 0x60000000);
@@ -209,6 +315,8 @@ public final class QuestScreen extends Screen {
         deliverButtons.clear();
         if (selectedQuest != null) {
             renderQuestDetail(graphics, selectedQuest, detailX, detailY, detailWidth);
+        } else if (selectedCategory == null) {
+            drawWrapped(graphics, Component.translatable("questapi.gui.empty"), detailX, detailY, detailWidth, 0xFF888888);
         }
     }
 
@@ -251,11 +359,17 @@ public final class QuestScreen extends Screen {
         cursorY = drawWrapped(graphics, Component.translatable("questapi.gui.objectives"), x, cursorY, width, 0xFF55FFFF);
         List<ObjectiveDefinition> objectives = quest.objectives();
         for (int i = 0; i < objectives.size(); i++) {
+            if (!progress.objectiveUnlocked(quest, i)) {
+                cursorY = drawWrapped(graphics, Component.translatable("questapi.gui.objective.hidden"), x, cursorY, width, 0xFF777777);
+                cursorY += PROGRESS_BAR_HEIGHT + 2;
+                continue;
+            }
             ObjectiveDefinition objective = objectives.get(i);
             ObjectiveProgress op = progress.objectives().getOrDefault(i, ObjectiveProgress.empty());
             String amountText = " (" + op.current() + "/" + objective.targetAmount() + ")";
             int color = op.complete() ? 0xFF55FF55 : 0xFFDDDDDD;
-            boolean deliverable = objective instanceof DeliverItemObjective && state == QuestState.ACTIVE && !op.complete();
+            boolean deliverable = objective instanceof DeliverItemObjective && state == QuestState.ACTIVE && !op.complete()
+                    && cache.manualActions().deliver();
             int lineWidth = width;
             int deliverButtonWidth = 0;
             Component deliverLabel = null;

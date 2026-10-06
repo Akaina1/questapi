@@ -30,6 +30,7 @@ public final class Quest {
     private final boolean repeatable;
     private final ResetMode resetMode;
     private final int resetAmount;
+    private final boolean sequential;
 
     private Quest(Builder builder) {
         this.id = builder.id;
@@ -45,6 +46,7 @@ public final class Quest {
         this.repeatable = builder.repeatable;
         this.resetMode = builder.resetMode;
         this.resetAmount = builder.resetAmount;
+        this.sequential = builder.sequential;
     }
 
     public static Builder builder(Identifier id) {
@@ -123,6 +125,17 @@ public final class Quest {
         return resetAmount;
     }
 
+    /**
+     * If {@code true}, objectives must be completed in order: an objective ignores events (and
+     * cannot be delivered to) until every objective before it is complete, and the default GUI
+     * hides the later steps until they unlock.
+     *
+     * @see QuestProgress#objectiveUnlocked(Quest, int)
+     */
+    public boolean sequential() {
+        return sequential;
+    }
+
     public static final class Builder {
         private final Identifier id;
         private Component title = Component.literal("Untitled Quest");
@@ -137,6 +150,7 @@ public final class Quest {
         private boolean repeatable = false;
         private ResetMode resetMode = null;
         private int resetAmount = 0;
+        private boolean sequential = false;
 
         private Builder(Identifier id) {
             this.id = id;
@@ -199,6 +213,14 @@ public final class Quest {
 
         public Builder sortOrder(int sortOrder) {
             this.sortOrder = sortOrder;
+            return this;
+        }
+
+        /**
+         * Requires objectives to be completed in the order they were added.
+         */
+        public Builder sequential(boolean sequential) {
+            this.sequential = sequential;
             return this;
         }
 
