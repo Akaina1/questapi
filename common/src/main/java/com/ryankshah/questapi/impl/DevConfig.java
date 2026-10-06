@@ -29,6 +29,7 @@ public final class DevConfig {
     private static final String SHOW_COMPLETED_TOAST_KEY = "show-quest-completed-toast";
     private static final String SHOW_STARTED_TOAST_KEY = "show-quest-started-toast";
     private static final String SHOW_REWARDED_TOAST_KEY = "show-quest-rewarded-toast";
+    private static final String SHOW_OBJECTIVE_TOAST_KEY = "show-objective-completed-toast";
 
     private static boolean devMode = false;
     private static ResetMode defaultResetMode = ResetMode.WALL_CLOCK;
@@ -40,6 +41,7 @@ public final class DevConfig {
     private static boolean showCompletedToast = true;
     private static boolean showStartedToast = true;
     private static boolean showRewardedToast = true;
+    private static boolean showObjectiveCompletedToast = true;
     private static boolean loaded = false;
 
     private DevConfig() {
@@ -85,6 +87,14 @@ public final class DevConfig {
      */
     public static boolean showUnlockedToast() {
         return showUnlockedToast;
+    }
+
+    /**
+     * Whether the server tells a player (toast and sound) when a single objective is completed.
+     * Partial progress never toasts.
+     */
+    public static boolean showObjectiveCompletedToast() {
+        return showObjectiveCompletedToast;
     }
 
     /**
@@ -141,6 +151,7 @@ public final class DevConfig {
             props.setProperty(SHOW_COMPLETED_TOAST_KEY, "true");
             props.setProperty(SHOW_STARTED_TOAST_KEY, "true");
             props.setProperty(SHOW_REWARDED_TOAST_KEY, "true");
+            props.setProperty(SHOW_OBJECTIVE_TOAST_KEY, "true");
             try {
                 Files.createDirectories(file.getParent());
             } catch (IOException ignored) {
@@ -154,7 +165,8 @@ public final class DevConfig {
                         + "quest book action, so quests can only be driven by code (for example from NPC dialogs).\n"
                         + "show-quest-unlocked-toast / show-quest-started-toast / show-quest-completed-toast /\n"
                         + "show-quest-rewarded-toast: set to false to suppress the toast and sound when a quest becomes\n"
-                        + "available / is accepted / has all objectives complete (ready to turn in) / has its rewards claimed.");
+                        + "available / is accepted / has all objectives complete (ready to turn in) / has its rewards claimed.\n"
+                        + "show-objective-completed-toast: set to false to suppress the toast when a single objective completes.");
             } catch (IOException e) {
                 QuestApi.LOG.warn("Failed to write default questapi.properties", e);
             }
@@ -174,6 +186,7 @@ public final class DevConfig {
         showCompletedToast = readBoolean(props, SHOW_COMPLETED_TOAST_KEY);
         showStartedToast = readBoolean(props, SHOW_STARTED_TOAST_KEY);
         showRewardedToast = readBoolean(props, SHOW_REWARDED_TOAST_KEY);
+        showObjectiveCompletedToast = readBoolean(props, SHOW_OBJECTIVE_TOAST_KEY);
         QuestApi.LOG.info("QuestAPI dev mode: {}, default repeatable-quest reset mode: {}", devMode, defaultResetMode);
         QuestApi.LOG.info("QuestAPI manual quest book actions allowed: start={}, abandon={}, claim={}, deliver={}",
                 allowManualStart, allowManualAbandon, allowManualClaim, allowManualDeliver);

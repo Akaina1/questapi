@@ -3,7 +3,10 @@ package com.ryankshah.questapi.impl.network;
 import com.ryankshah.questapi.QuestApi;
 import com.ryankshah.questapi.api.quest.ManualQuestActions;
 import com.ryankshah.questapi.api.quest.Quest;
+import com.ryankshah.questapi.api.quest.QuestProgress;
+import com.ryankshah.questapi.api.quest.objective.ObjectiveProgress;
 import com.ryankshah.questapi.impl.DevConfig;
+import com.ryankshah.questapi.impl.network.payload.ClientboundObjectiveCompletedPayload;
 import com.ryankshah.questapi.impl.network.payload.ClientboundQuestCompletedPayload;
 import com.ryankshah.questapi.impl.network.payload.ClientboundQuestRewardedPayload;
 import com.ryankshah.questapi.impl.network.payload.ClientboundQuestStartedPayload;
@@ -47,6 +50,32 @@ public final class QuestNetworking {
             return;
         }
         Services.NETWORK.sendToPlayer(player, new ClientboundQuestCompletedPayload(quest.title()));
+    }
+
+    /**
+     * Toasts a finished objective. When it was the quest's last open objective, the "ready to turn
+     * in" toast fires right after and would overwrite this one, so this one is skipped in that case.
+     */
+    public static void sendObjectiveCompleted(ServerPlayer player, Quest quest, int objectiveIndex) {
+        if (!DevConfig.showObjectiveCompletedToast()) {
+            return;
+        }
+        if (DevConfig.showCompletedToast() && allObjectivesComplete(player, quest)) {
+            return;
+        }
+        Services.NETWORK.sendToPlayer(player, new ClientboundObjectiveCompletedPayload(
+                quest.objectives().get(objectiveIndex).describe()));
+    }
+
+    private static boolean allObjectivesComplete(ServerPlayer player, Quest quest) {
+        QuestProgress progress = QuestApi.manager().getProgress(player, quest.id());
+        for (int i = 0; i < quest.objectives().size(); i++) {
+            ObjectiveProgress objective = progress.objectives().get(i);
+            if (objective == null || !objective.complete()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     public static void sendQuestRewarded(ServerPlayer player, Quest quest) {

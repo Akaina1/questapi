@@ -47,6 +47,13 @@ public final class ClientQuestNetworking {
                 Component.translatable("questapi.toast.quest_rewarded.title"), questTitle);
     }
 
+    public static void handleObjectiveCompleted(Component objectiveDescription) {
+        Minecraft minecraft = Minecraft.getInstance();
+        minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.EXPERIENCE_ORB_PICKUP, 1.0F));
+        SystemToast.add(minecraft.gui.toastManager(), SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
+                Component.translatable("questapi.toast.objective_completed.title"), objectiveDescription);
+    }
+
     public static void handleQuestUnlocked(Component questTitle) {
         Minecraft minecraft = Minecraft.getInstance();
         minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.EXPERIENCE_ORB_PICKUP, 1.0F));

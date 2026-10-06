@@ -60,6 +60,7 @@
   "questapi.gui.abandon.confirm.title": "Abandon quest?",
   "questapi.gui.abandon.confirm.message": "Progress on this quest will be lost.",
 
+  "questapi.toast.objective_completed.title": "Objective complete",
   "questapi.toast.quest_ready.title": "Ready to turn in",
   "questapi.toast.quest_rewarded.title": "Quest completed",
   "questapi.toast.quest_unlocked.title": "New quest available",

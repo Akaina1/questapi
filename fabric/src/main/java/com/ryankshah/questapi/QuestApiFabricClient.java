@@ -5,6 +5,7 @@ import com.ryankshah.questapi.QuestApi;
 import com.ryankshah.questapi.client.gui.QuestScreen;
 import com.ryankshah.questapi.client.gui.QuestTrackerHud;
 import com.ryankshah.questapi.client.network.ClientQuestNetworking;
+import com.ryankshah.questapi.impl.network.payload.ClientboundObjectiveCompletedPayload;
 import com.ryankshah.questapi.impl.network.payload.ClientboundQuestCompletedPayload;
 import com.ryankshah.questapi.impl.network.payload.ClientboundQuestRewardedPayload;
 import com.ryankshah.questapi.impl.network.payload.ClientboundQuestStartedPayload;
@@ -42,6 +43,8 @@ public class QuestApiFabricClient implements ClientModInitializer {
                 (payload, context) -> ClientQuestNetworking.handleQuestStarted(payload.questTitle()));
         ClientPlayNetworking.registerGlobalReceiver(ClientboundQuestRewardedPayload.TYPE,
                 (payload, context) -> ClientQuestNetworking.handleQuestRewarded(payload.questTitle()));
+        ClientPlayNetworking.registerGlobalReceiver(ClientboundObjectiveCompletedPayload.TYPE,
+                (payload, context) -> ClientQuestNetworking.handleObjectiveCompleted(payload.objectiveDescription()));
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             while (openQuestsKey.consumeClick()) {
