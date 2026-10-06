@@ -6,6 +6,8 @@ import com.ryankshah.questapi.impl.DevConfig;
 import com.ryankshah.questapi.impl.data.QuestDataLoader;
 import com.ryankshah.questapi.impl.network.QuestNetworking;
 import com.ryankshah.questapi.impl.network.payload.ClientboundQuestCompletedPayload;
+import com.ryankshah.questapi.impl.network.payload.ClientboundQuestRewardedPayload;
+import com.ryankshah.questapi.impl.network.payload.ClientboundQuestStartedPayload;
 import com.ryankshah.questapi.impl.network.payload.ClientboundQuestUnlockedPayload;
 import com.ryankshah.questapi.impl.network.payload.ClientboundSyncDefinitionsPayload;
 import com.ryankshah.questapi.impl.network.payload.ClientboundSyncProgressPayload;
@@ -63,6 +65,10 @@ public class QuestApiNeoForge {
                 (payload, context) -> com.ryankshah.questapi.client.network.ClientQuestNetworking.handleQuestCompleted(payload.questTitle()));
         registrar.playToClient(ClientboundQuestUnlockedPayload.TYPE, ClientboundQuestUnlockedPayload.STREAM_CODEC,
                 (payload, context) -> com.ryankshah.questapi.client.network.ClientQuestNetworking.handleQuestUnlocked(payload.questTitle()));
+        registrar.playToClient(ClientboundQuestStartedPayload.TYPE, ClientboundQuestStartedPayload.STREAM_CODEC,
+                (payload, context) -> com.ryankshah.questapi.client.network.ClientQuestNetworking.handleQuestStarted(payload.questTitle()));
+        registrar.playToClient(ClientboundQuestRewardedPayload.TYPE, ClientboundQuestRewardedPayload.STREAM_CODEC,
+                (payload, context) -> com.ryankshah.questapi.client.network.ClientQuestNetworking.handleQuestRewarded(payload.questTitle()));
 
         registrar.playToServer(ServerboundRequestSyncPayload.TYPE, ServerboundRequestSyncPayload.STREAM_CODEC,
                 (payload, context) -> QuestNetworking.handleRequestSync((ServerPlayer) context.player()));

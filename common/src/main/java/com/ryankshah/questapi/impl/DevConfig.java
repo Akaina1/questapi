@@ -25,6 +25,10 @@ public final class DevConfig {
     private static final String ALLOW_MANUAL_ABANDON_KEY = "allow-manual-abandon";
     private static final String ALLOW_MANUAL_CLAIM_KEY = "allow-manual-claim";
     private static final String ALLOW_MANUAL_DELIVER_KEY = "allow-manual-deliver";
+    private static final String SHOW_UNLOCKED_TOAST_KEY = "show-quest-unlocked-toast";
+    private static final String SHOW_COMPLETED_TOAST_KEY = "show-quest-completed-toast";
+    private static final String SHOW_STARTED_TOAST_KEY = "show-quest-started-toast";
+    private static final String SHOW_REWARDED_TOAST_KEY = "show-quest-rewarded-toast";
 
     private static boolean devMode = false;
     private static ResetMode defaultResetMode = ResetMode.WALL_CLOCK;
@@ -32,6 +36,10 @@ public final class DevConfig {
     private static boolean allowManualAbandon = true;
     private static boolean allowManualClaim = true;
     private static boolean allowManualDeliver = true;
+    private static boolean showUnlockedToast = true;
+    private static boolean showCompletedToast = true;
+    private static boolean showStartedToast = true;
+    private static boolean showRewardedToast = true;
     private static boolean loaded = false;
 
     private DevConfig() {
@@ -73,6 +81,35 @@ public final class DevConfig {
     }
 
     /**
+     * Whether the server tells a player (toast and sound) when a quest becomes {@code AVAILABLE}.
+     */
+    public static boolean showUnlockedToast() {
+        return showUnlockedToast;
+    }
+
+    /**
+     * Whether the server tells a player (toast and sound) when a quest's rewards are claimed.
+     */
+    public static boolean showRewardedToast() {
+        return showRewardedToast;
+    }
+
+    /**
+     * Whether the server tells a player (toast and sound) when a quest's objectives are all done and
+     * it is ready to turn in.
+     */
+    public static boolean showCompletedToast() {
+        return showCompletedToast;
+    }
+
+    /**
+     * Whether the server tells a player (toast and sound) when a quest becomes {@code ACTIVE}.
+     */
+    public static boolean showStartedToast() {
+        return showStartedToast;
+    }
+
+    /**
      * The reset mode a repeatable quest resolves to when it does not specify its own via
      * {@code Quest.Builder#repeatable(ResetMode, int)}.
      */
@@ -100,6 +137,10 @@ public final class DevConfig {
             props.setProperty(ALLOW_MANUAL_ABANDON_KEY, "true");
             props.setProperty(ALLOW_MANUAL_CLAIM_KEY, "true");
             props.setProperty(ALLOW_MANUAL_DELIVER_KEY, "true");
+            props.setProperty(SHOW_UNLOCKED_TOAST_KEY, "true");
+            props.setProperty(SHOW_COMPLETED_TOAST_KEY, "true");
+            props.setProperty(SHOW_STARTED_TOAST_KEY, "true");
+            props.setProperty(SHOW_REWARDED_TOAST_KEY, "true");
             try {
                 Files.createDirectories(file.getParent());
             } catch (IOException ignored) {
@@ -110,7 +151,10 @@ public final class DevConfig {
                         + "repeatable-quest-default-reset-mode: WALL_CLOCK or IN_GAME_DAY, used by repeatable\n"
                         + "quests that don't specify their own reset mode.\n"
                         + "allow-manual-start/abandon/claim/deliver: set to false to make the server ignore the matching\n"
-                        + "quest book action, so quests can only be driven by code (for example from NPC dialogs).");
+                        + "quest book action, so quests can only be driven by code (for example from NPC dialogs).\n"
+                        + "show-quest-unlocked-toast / show-quest-started-toast / show-quest-completed-toast /\n"
+                        + "show-quest-rewarded-toast: set to false to suppress the toast and sound when a quest becomes\n"
+                        + "available / is accepted / has all objectives complete (ready to turn in) / has its rewards claimed.");
             } catch (IOException e) {
                 QuestApi.LOG.warn("Failed to write default questapi.properties", e);
             }
@@ -126,6 +170,10 @@ public final class DevConfig {
         allowManualAbandon = readBoolean(props, ALLOW_MANUAL_ABANDON_KEY);
         allowManualClaim = readBoolean(props, ALLOW_MANUAL_CLAIM_KEY);
         allowManualDeliver = readBoolean(props, ALLOW_MANUAL_DELIVER_KEY);
+        showUnlockedToast = readBoolean(props, SHOW_UNLOCKED_TOAST_KEY);
+        showCompletedToast = readBoolean(props, SHOW_COMPLETED_TOAST_KEY);
+        showStartedToast = readBoolean(props, SHOW_STARTED_TOAST_KEY);
+        showRewardedToast = readBoolean(props, SHOW_REWARDED_TOAST_KEY);
         QuestApi.LOG.info("QuestAPI dev mode: {}, default repeatable-quest reset mode: {}", devMode, defaultResetMode);
         QuestApi.LOG.info("QuestAPI manual quest book actions allowed: start={}, abandon={}, claim={}, deliver={}",
                 allowManualStart, allowManualAbandon, allowManualClaim, allowManualDeliver);

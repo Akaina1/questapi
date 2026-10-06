@@ -60,8 +60,10 @@
   "questapi.gui.abandon.confirm.title": "Abandon quest?",
   "questapi.gui.abandon.confirm.message": "Progress on this quest will be lost.",
 
-  "questapi.toast.quest_completed.title": "Quest completed",
+  "questapi.toast.quest_ready.title": "Ready to turn in",
+  "questapi.toast.quest_rewarded.title": "Quest completed",
   "questapi.toast.quest_unlocked.title": "New quest available",
+  "questapi.toast.quest_started.title": "Quest accepted",
 
   "key.questapi.open_quests": "Open Quest Book"
 }

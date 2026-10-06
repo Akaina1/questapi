@@ -5,6 +5,8 @@ import com.ryankshah.questapi.api.quest.ManualQuestActions;
 import com.ryankshah.questapi.api.quest.Quest;
 import com.ryankshah.questapi.impl.DevConfig;
 import com.ryankshah.questapi.impl.network.payload.ClientboundQuestCompletedPayload;
+import com.ryankshah.questapi.impl.network.payload.ClientboundQuestRewardedPayload;
+import com.ryankshah.questapi.impl.network.payload.ClientboundQuestStartedPayload;
 import com.ryankshah.questapi.impl.network.payload.ClientboundQuestUnlockedPayload;
 import com.ryankshah.questapi.impl.network.payload.ClientboundSyncDefinitionsPayload;
 import com.ryankshah.questapi.impl.network.payload.ClientboundSyncProgressPayload;
@@ -41,10 +43,30 @@ public final class QuestNetworking {
     }
 
     public static void sendQuestCompleted(ServerPlayer player, Quest quest) {
+        if (!DevConfig.showCompletedToast()) {
+            return;
+        }
         Services.NETWORK.sendToPlayer(player, new ClientboundQuestCompletedPayload(quest.title()));
     }
 
+    public static void sendQuestRewarded(ServerPlayer player, Quest quest) {
+        if (!DevConfig.showRewardedToast()) {
+            return;
+        }
+        Services.NETWORK.sendToPlayer(player, new ClientboundQuestRewardedPayload(quest.title()));
+    }
+
+    public static void sendQuestStarted(ServerPlayer player, Quest quest) {
+        if (!DevConfig.showStartedToast()) {
+            return;
+        }
+        Services.NETWORK.sendToPlayer(player, new ClientboundQuestStartedPayload(quest.title()));
+    }
+
     public static void sendQuestUnlocked(ServerPlayer player, Quest quest) {
+        if (!DevConfig.showUnlockedToast()) {
+            return;
+        }
         Services.NETWORK.sendToPlayer(player, new ClientboundQuestUnlockedPayload(quest.title()));
     }
 

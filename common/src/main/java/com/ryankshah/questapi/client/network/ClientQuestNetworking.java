@@ -37,7 +37,14 @@ public final class ClientQuestNetworking {
         Minecraft minecraft = Minecraft.getInstance();
         minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.PLAYER_LEVELUP, 1.0F));
         SystemToast.add(minecraft.gui.toastManager(), SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
-                Component.translatable("questapi.toast.quest_completed.title"), questTitle);
+                Component.translatable("questapi.toast.quest_ready.title"), questTitle);
+    }
+
+    public static void handleQuestRewarded(Component questTitle) {
+        Minecraft minecraft = Minecraft.getInstance();
+        minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.PLAYER_LEVELUP, 1.0F));
+        SystemToast.add(minecraft.gui.toastManager(), SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
+                Component.translatable("questapi.toast.quest_rewarded.title"), questTitle);
     }
 
     public static void handleQuestUnlocked(Component questTitle) {
@@ -45,6 +52,13 @@ public final class ClientQuestNetworking {
         minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.EXPERIENCE_ORB_PICKUP, 1.0F));
         SystemToast.add(minecraft.gui.toastManager(), SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
                 Component.translatable("questapi.toast.quest_unlocked.title"), questTitle);
+    }
+
+    public static void handleQuestStarted(Component questTitle) {
+        Minecraft minecraft = Minecraft.getInstance();
+        minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.EXPERIENCE_ORB_PICKUP, 1.0F));
+        SystemToast.add(minecraft.gui.toastManager(), SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
+                Component.translatable("questapi.toast.quest_started.title"), questTitle);
     }
 
     public static void requestSync() {
