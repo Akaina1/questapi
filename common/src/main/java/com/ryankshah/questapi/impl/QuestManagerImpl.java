@@ -159,6 +159,9 @@ public final class QuestManagerImpl implements QuestManager {
         progress.setStartedAt(System.currentTimeMillis());
         progress.setElapsedTicks(0L);
         clockSamples.remove(new TimerKey(player.getUUID(), quest.id()));
+        if (DevConfig.autoTrackStartedQuests()) {
+            dataFor(player).trackIfRoom(quest.id());
+        }
         for (QuestEventListener listener : QuestEvents.listeners()) {
             listener.onQuestStarted(player, quest);
         }
@@ -193,6 +196,17 @@ public final class QuestManagerImpl implements QuestManager {
                 listener.onQuestReset(player, quest);
             }
         });
+        return true;
+    }
+
+    @Override
+    public boolean toggleTracked(ServerPlayer player, Identifier questId) {
+        PlayerQuestData data = dataFor(player);
+        if (!data.isTracked(questId) && getState(player, questId) != QuestState.ACTIVE) {
+            return false;
+        }
+        data.toggleTracked(questId);
+        markDirty();
         return true;
     }
 

@@ -19,9 +19,10 @@ import java.util.List;
 import java.util.OptionalLong;
 
 /**
- * Renders the player's pinned quests (see {@link ClientQuestDataCache#toggleTracked}), at most
- * {@link ClientQuestDataCache#MAX_TRACKED}, stacked in the top right corner of the HUD, so their
- * objectives stay visible without reopening the quest book.
+ * Renders the player's pinned quests (see {@link ClientQuestDataCache#trackedQuestIds}), at most
+ * {@link com.ryankshah.questapi.api.quest.PlayerQuestData#MAX_TRACKED}, stacked in the top right
+ * corner of the HUD, so their objectives stay visible without reopening the quest book. The pinned
+ * list is saved by the server, so it survives relogs.
  * Registered as a HUD element/layer by each loader's client bootstrap; identical on both since
  * Fabric's {@code HudElement} and NeoForge's {@code GuiLayer} share this exact render signature.
  */

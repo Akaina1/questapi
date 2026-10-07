@@ -248,10 +248,8 @@ public final class QuestScreen extends Screen {
                 }
                 boolean tracked = cache.isTracked(selectedQuest.id());
                 Component trackLabel = Component.translatable(tracked ? "questapi.gui.action.untrack" : "questapi.gui.action.track");
-                trackButton = Button.builder(trackLabel, b -> {
-                            cache.toggleTracked(selectedQuest.id());
-                            refreshActionButton();
-                        })
+                trackButton = Button.builder(trackLabel,
+                                b -> ClientQuestNetworking.requestToggleTrackQuest(selectedQuest.id()))
                         .bounds(detailX, trackY, detailWidth, 20).build();
             }
             case COMPLETED -> {

@@ -31,12 +31,14 @@ public final class DevConfig {
     private static final String SHOW_REWARDED_TOAST_KEY = "show-quest-rewarded-toast";
     private static final String SHOW_OBJECTIVE_TOAST_KEY = "show-objective-completed-toast";
     private static final String SHOW_FAILED_TOAST_KEY = "show-quest-failed-toast";
+    private static final String AUTO_TRACK_STARTED_KEY = "auto-track-started-quests";
     private static final String TICKS_PER_GAME_DAY_KEY = "ticks-per-game-day";
     private static final int DEFAULT_TICKS_PER_GAME_DAY = 24000;
 
     private static boolean devMode = false;
     private static int ticksPerGameDay = DEFAULT_TICKS_PER_GAME_DAY;
     private static boolean showFailedToast = true;
+    private static boolean autoTrackStartedQuests = true;
     private static ResetMode defaultResetMode = ResetMode.WALL_CLOCK;
     private static boolean allowManualStart = true;
     private static boolean allowManualAbandon = true;
@@ -132,6 +134,14 @@ public final class DevConfig {
     }
 
     /**
+     * Whether a quest is pinned to the player's HUD tracker automatically when it starts, as long
+     * as the tracker has a free slot.
+     */
+    public static boolean autoTrackStartedQuests() {
+        return autoTrackStartedQuests;
+    }
+
+    /**
      * How many ticks of the overworld day clock make one in-game day, used to convert
      * {@code GAME_DAYS} and {@code GAME_HOURS} quest time limits. Modpacks that change the length
      * of a day can override the vanilla 24000.
@@ -174,6 +184,7 @@ public final class DevConfig {
             props.setProperty(SHOW_REWARDED_TOAST_KEY, "true");
             props.setProperty(SHOW_OBJECTIVE_TOAST_KEY, "true");
             props.setProperty(SHOW_FAILED_TOAST_KEY, "true");
+            props.setProperty(AUTO_TRACK_STARTED_KEY, "true");
             props.setProperty(TICKS_PER_GAME_DAY_KEY, String.valueOf(DEFAULT_TICKS_PER_GAME_DAY));
             try {
                 Files.createDirectories(file.getParent());
@@ -191,6 +202,8 @@ public final class DevConfig {
                         + "available / is accepted / has all objectives complete (ready to turn in) / has its rewards claimed.\n"
                         + "show-objective-completed-toast: set to false to suppress the toast when a single objective completes.\n"
                         + "show-quest-failed-toast: set to false to suppress the toast and sound when a quest fails.\n"
+                        + "auto-track-started-quests: set to false to stop quests being pinned to the HUD tracker automatically\n"
+                        + "when they start (players can still pin them from the quest book).\n"
                         + "ticks-per-game-day: length of an in-game day in ticks of the overworld day clock, used for\n"
                         + "GAME_DAYS and GAME_HOURS quest time limits (vanilla is 24000).");
             } catch (IOException e) {
@@ -214,6 +227,7 @@ public final class DevConfig {
         showRewardedToast = readBoolean(props, SHOW_REWARDED_TOAST_KEY);
         showObjectiveCompletedToast = readBoolean(props, SHOW_OBJECTIVE_TOAST_KEY);
         showFailedToast = readBoolean(props, SHOW_FAILED_TOAST_KEY);
+        autoTrackStartedQuests = readBoolean(props, AUTO_TRACK_STARTED_KEY);
         ticksPerGameDay = readPositiveInt(props, TICKS_PER_GAME_DAY_KEY, DEFAULT_TICKS_PER_GAME_DAY);
         QuestApi.LOG.info("QuestAPI dev mode: {}, default repeatable-quest reset mode: {}", devMode, defaultResetMode);
         QuestApi.LOG.info("QuestAPI manual quest book actions allowed: start={}, abandon={}, claim={}, deliver={}",

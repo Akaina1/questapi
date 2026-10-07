@@ -418,6 +418,16 @@ handled by identical shared logic in `impl.network.QuestNetworking` / `client.ne
 Only the player's *own* progress is ever synced (never other players'), and only when it actually
 changes - not on a timer.
 
+### HUD quest tracking
+
+The quests pinned to the HUD tracker (at most `PlayerQuestData.MAX_TRACKED`, 3) are stored in the
+player's `PlayerQuestData` (`tracked` field) and therefore saved with their progress and synced with
+it, so pinned quests survive relogs. The quest book pins and unpins through
+`ServerboundToggleTrackQuestPayload`; the server only allows pinning an `ACTIVE` quest and drops
+pinned quests automatically once they stop being active. `QuestManager#toggleTracked` exposes the same
+operation to other mods. A quest is pinned automatically when it starts if the tracker has a free slot;
+set `auto-track-started-quests=false` in `config/questapi.properties` to turn that off.
+
 ## Mixins
 
 Exactly two, both in the common module, both because there is no cross-loader vanilla event for the

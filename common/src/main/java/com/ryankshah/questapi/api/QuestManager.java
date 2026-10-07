@@ -62,6 +62,13 @@ public interface QuestManager {
     boolean abandonQuest(ServerPlayer player, Identifier questId);
 
     /**
+     * Pins or unpins a quest on the player's HUD tracker, which is saved with their quest data.
+     * Pinning is only allowed for an {@code ACTIVE} quest; unpinning is always allowed. Pinning
+     * into a full tracker drops the oldest pinned quest. Returns {@code false} if nothing changed.
+     */
+    boolean toggleTracked(ServerPlayer player, Identifier questId);
+
+    /**
      * Fails an {@code ACTIVE} quest, moving it to {@code FAILED} and keeping its objective progress
      * for display. No-op (returns {@code false}) if the quest is not active. A failed quest only
      * leaves that state through {@link #resetQuest}, except for quests whose failure rules mark them

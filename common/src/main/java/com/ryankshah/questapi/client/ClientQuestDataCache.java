@@ -12,7 +12,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.level.Level;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalLong;
@@ -27,9 +26,6 @@ import java.util.OptionalLong;
  */
 public final class ClientQuestDataCache {
 
-    /** The most quests that can be pinned to the HUD tracker at once. */
-    public static final int MAX_TRACKED = 3;
-
     private static final int DEFAULT_TICKS_PER_GAME_DAY = 24000;
 
     public static final ClientQuestDataCache INSTANCE = new ClientQuestDataCache();
@@ -40,7 +36,6 @@ public final class ClientQuestDataCache {
     private int ticksPerGameDay = DEFAULT_TICKS_PER_GAME_DAY;
     private PlayerQuestData progress;
     private int revision = 0;
-    private final List<Identifier> trackedQuestIds = new ArrayList<>();
     private boolean clockStamped = false;
     private long syncedClockTime = 0L;
     private long syncedGameTime = 0L;
@@ -75,7 +70,6 @@ public final class ClientQuestDataCache {
     public void setProgress(PlayerQuestData progress) {
         this.progress = progress;
         stampClocks();
-        trackedQuestIds.removeIf(id -> getState(id) != QuestState.ACTIVE);
         this.revision++;
     }
 
@@ -167,28 +161,14 @@ public final class ClientQuestDataCache {
 
     /**
      * The quests currently pinned to the in-game HUD tracker, oldest first, at most
-     * {@link #MAX_TRACKED}. Purely a client-side display preference - never synced to the server or
-     * other clients.
+     * {@link PlayerQuestData#MAX_TRACKED}. The list is owned and saved by the server and arrives
+     * with the progress sync; pin or unpin through {@code ClientQuestNetworking#requestToggleTrackQuest}.
      */
     public List<Identifier> trackedQuestIds() {
-        return List.copyOf(trackedQuestIds);
+        return progress == null ? List.of() : List.copyOf(progress.tracked());
     }
 
     public boolean isTracked(Identifier questId) {
-        return trackedQuestIds.contains(questId);
-    }
-
-    /**
-     * Unpins {@code questId} if it is pinned; otherwise pins it, dropping the oldest pinned quest
-     * when the tracker is already full.
-     */
-    public void toggleTracked(Identifier questId) {
-        if (trackedQuestIds.remove(questId)) {
-            return;
-        }
-        if (trackedQuestIds.size() >= MAX_TRACKED) {
-            trackedQuestIds.remove(0);
-        }
-        trackedQuestIds.add(questId);
+        return progress != null && progress.isTracked(questId);
     }
 }

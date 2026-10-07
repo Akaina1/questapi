@@ -2,6 +2,7 @@ package com.ryankshah.questapi.impl.network;
 
 import com.ryankshah.questapi.QuestApi;
 import com.ryankshah.questapi.api.quest.ManualQuestActions;
+import com.ryankshah.questapi.api.quest.PlayerQuestData;
 import com.ryankshah.questapi.api.quest.Quest;
 import com.ryankshah.questapi.api.quest.QuestProgress;
 import com.ryankshah.questapi.api.quest.QuestToastOverrides;
@@ -48,7 +49,9 @@ public final class QuestNetworking {
         // live reference to the mutable PlayerQuestData would race further server-thread mutations
         // (e.g. the next tick's objective updates) and throw ConcurrentModificationException mid
         // -encode. A snapshot copy is cheap and makes that impossible.
-        Services.NETWORK.sendToPlayer(player, new ClientboundSyncProgressPayload(QuestApi.manager().dataFor(player).copy()));
+        PlayerQuestData data = QuestApi.manager().dataFor(player);
+        data.pruneTracked();
+        Services.NETWORK.sendToPlayer(player, new ClientboundSyncProgressPayload(data.copy()));
     }
 
     public static void sendQuestCompleted(ServerPlayer player, Quest quest) {
@@ -140,6 +143,12 @@ public final class QuestNetworking {
             return;
         }
         if (QuestApi.manager().startQuest(player, questId)) {
+            sendProgress(player);
+        }
+    }
+
+    public static void handleToggleTrackQuest(ServerPlayer player, Identifier questId) {
+        if (QuestApi.manager().toggleTracked(player, questId)) {
             sendProgress(player);
         }
     }

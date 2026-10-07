@@ -8,6 +8,7 @@ import com.ryankshah.questapi.impl.network.payload.ServerboundClaimRewardPayload
 import com.ryankshah.questapi.impl.network.payload.ServerboundDeliverItemsPayload;
 import com.ryankshah.questapi.impl.network.payload.ServerboundRequestSyncPayload;
 import com.ryankshah.questapi.impl.network.payload.ServerboundStartQuestPayload;
+import com.ryankshah.questapi.impl.network.payload.ServerboundToggleTrackQuestPayload;
 import com.ryankshah.questapi.platform.Services;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.toasts.SystemToast;
@@ -81,6 +82,10 @@ public final class ClientQuestNetworking {
 
     public static void requestStartQuest(Identifier questId) {
         Services.NETWORK.sendToServer(new ServerboundStartQuestPayload(questId));
+    }
+
+    public static void requestToggleTrackQuest(Identifier questId) {
+        Services.NETWORK.sendToServer(new ServerboundToggleTrackQuestPayload(questId));
     }
 
     public static void requestAbandonQuest(Identifier questId) {

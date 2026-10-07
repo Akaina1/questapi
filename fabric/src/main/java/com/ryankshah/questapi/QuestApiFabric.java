@@ -19,6 +19,7 @@ import com.ryankshah.questapi.impl.network.payload.ServerboundClaimRewardPayload
 import com.ryankshah.questapi.impl.network.payload.ServerboundDeliverItemsPayload;
 import com.ryankshah.questapi.impl.network.payload.ServerboundRequestSyncPayload;
 import com.ryankshah.questapi.impl.network.payload.ServerboundStartQuestPayload;
+import com.ryankshah.questapi.impl.network.payload.ServerboundToggleTrackQuestPayload;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
@@ -52,6 +53,7 @@ public class QuestApiFabric implements ModInitializer {
         PayloadTypeRegistry.clientboundPlay().register(ClientboundObjectiveCompletedPayload.TYPE, ClientboundObjectiveCompletedPayload.STREAM_CODEC);
         PayloadTypeRegistry.serverboundPlay().register(ServerboundRequestSyncPayload.TYPE, ServerboundRequestSyncPayload.STREAM_CODEC);
         PayloadTypeRegistry.serverboundPlay().register(ServerboundStartQuestPayload.TYPE, ServerboundStartQuestPayload.STREAM_CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(ServerboundToggleTrackQuestPayload.TYPE, ServerboundToggleTrackQuestPayload.STREAM_CODEC);
         PayloadTypeRegistry.serverboundPlay().register(ServerboundAbandonQuestPayload.TYPE, ServerboundAbandonQuestPayload.STREAM_CODEC);
         PayloadTypeRegistry.serverboundPlay().register(ServerboundClaimRewardPayload.TYPE, ServerboundClaimRewardPayload.STREAM_CODEC);
         PayloadTypeRegistry.serverboundPlay().register(ServerboundDeliverItemsPayload.TYPE, ServerboundDeliverItemsPayload.STREAM_CODEC);
@@ -60,6 +62,8 @@ public class QuestApiFabric implements ModInitializer {
                 (payload, context) -> QuestNetworking.handleRequestSync(context.player()));
         ServerPlayNetworking.registerGlobalReceiver(ServerboundStartQuestPayload.TYPE,
                 (payload, context) -> QuestNetworking.handleStartQuest(context.player(), payload.questId()));
+        ServerPlayNetworking.registerGlobalReceiver(ServerboundToggleTrackQuestPayload.TYPE,
+                (payload, context) -> QuestNetworking.handleToggleTrackQuest(context.player(), payload.questId()));
         ServerPlayNetworking.registerGlobalReceiver(ServerboundAbandonQuestPayload.TYPE,
                 (payload, context) -> QuestNetworking.handleAbandonQuest(context.player(), payload.questId()));
         ServerPlayNetworking.registerGlobalReceiver(ServerboundClaimRewardPayload.TYPE,

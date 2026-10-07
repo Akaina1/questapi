@@ -19,6 +19,7 @@ import com.ryankshah.questapi.impl.network.payload.ServerboundClaimRewardPayload
 import com.ryankshah.questapi.impl.network.payload.ServerboundDeliverItemsPayload;
 import com.ryankshah.questapi.impl.network.payload.ServerboundRequestSyncPayload;
 import com.ryankshah.questapi.impl.network.payload.ServerboundStartQuestPayload;
+import com.ryankshah.questapi.impl.network.payload.ServerboundToggleTrackQuestPayload;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
@@ -83,6 +84,8 @@ public class QuestApiNeoForge {
                 (payload, context) -> QuestNetworking.handleRequestSync((ServerPlayer) context.player()));
         registrar.playToServer(ServerboundStartQuestPayload.TYPE, ServerboundStartQuestPayload.STREAM_CODEC,
                 (payload, context) -> QuestNetworking.handleStartQuest((ServerPlayer) context.player(), payload.questId()));
+        registrar.playToServer(ServerboundToggleTrackQuestPayload.TYPE, ServerboundToggleTrackQuestPayload.STREAM_CODEC,
+                (payload, context) -> QuestNetworking.handleToggleTrackQuest((ServerPlayer) context.player(), payload.questId()));
         registrar.playToServer(ServerboundAbandonQuestPayload.TYPE, ServerboundAbandonQuestPayload.STREAM_CODEC,
                 (payload, context) -> QuestNetworking.handleAbandonQuest((ServerPlayer) context.player(), payload.questId()));
         registrar.playToServer(ServerboundClaimRewardPayload.TYPE, ServerboundClaimRewardPayload.STREAM_CODEC,
