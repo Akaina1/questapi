@@ -23,7 +23,8 @@ public final class QuestProgress {
             Codec.LONG.fieldOf("startedAt").forGetter(QuestProgress::startedAt),
             Codec.LONG.fieldOf("completedAt").forGetter(QuestProgress::completedAt),
             Codec.LONG.fieldOf("rewardedAt").forGetter(QuestProgress::rewardedAt),
-            Codec.LONG.optionalFieldOf("rewardedAtDay", 0L).forGetter(QuestProgress::rewardedAtDay)
+            Codec.LONG.optionalFieldOf("rewardedAtDay", 0L).forGetter(QuestProgress::rewardedAtDay),
+            Codec.LONG.optionalFieldOf("elapsedTicks", 0L).forGetter(QuestProgress::elapsedTicks)
     ).apply(instance, QuestProgress::new));
 
     private QuestState state;
@@ -32,18 +33,20 @@ public final class QuestProgress {
     private long completedAt;
     private long rewardedAt;
     private long rewardedAtDay;
+    private long elapsedTicks;
 
-    public QuestProgress(QuestState state, Map<Integer, ObjectiveProgress> objectives, long startedAt, long completedAt, long rewardedAt, long rewardedAtDay) {
+    public QuestProgress(QuestState state, Map<Integer, ObjectiveProgress> objectives, long startedAt, long completedAt, long rewardedAt, long rewardedAtDay, long elapsedTicks) {
         this.state = state;
         this.objectives = new HashMap<>(objectives);
         this.startedAt = startedAt;
         this.completedAt = completedAt;
         this.rewardedAt = rewardedAt;
         this.rewardedAtDay = rewardedAtDay;
+        this.elapsedTicks = elapsedTicks;
     }
 
     public static QuestProgress locked() {
-        return new QuestProgress(QuestState.LOCKED, Map.of(), 0, 0, 0, 0);
+        return new QuestProgress(QuestState.LOCKED, Map.of(), 0, 0, 0, 0, 0);
     }
 
     public QuestState state() {
@@ -121,6 +124,19 @@ public final class QuestProgress {
         this.rewardedAtDay = rewardedAtDay;
     }
 
+    /**
+     * How much of the quest's time limit has been used, in ticks of the limit's clock (day-clock
+     * ticks for game-time units, server ticks for {@link TimeLimitUnit#REAL_SECONDS}). Only
+     * accumulates while the quest is active and the player is online.
+     */
+    public long elapsedTicks() {
+        return elapsedTicks;
+    }
+
+    public void setElapsedTicks(long elapsedTicks) {
+        this.elapsedTicks = elapsedTicks;
+    }
+
     public boolean rewardClaimed() {
         return state == QuestState.REWARDED;
     }
@@ -135,6 +151,6 @@ public final class QuestProgress {
         for (Map.Entry<Integer, ObjectiveProgress> entry : objectives.entrySet()) {
             copiedObjectives.put(entry.getKey(), entry.getValue().copy());
         }
-        return new QuestProgress(state, copiedObjectives, startedAt, completedAt, rewardedAt, rewardedAtDay);
+        return new QuestProgress(state, copiedObjectives, startedAt, completedAt, rewardedAt, rewardedAtDay, elapsedTicks);
     }
 }

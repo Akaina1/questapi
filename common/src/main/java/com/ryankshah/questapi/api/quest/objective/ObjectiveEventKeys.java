@@ -27,6 +27,12 @@ public final class ObjectiveEventKeys {
     /** Fired when a player delivers items to a quest via the GUI or a command. */
     public static final Identifier ITEM_DELIVERED = Identifier.fromNamespaceAndPath("questapi", "item_delivered");
 
+    /**
+     * Fired when a player dies. No built-in objective listens for it; quests use it in
+     * {@code failure.fail_on} to fail when the player dies.
+     */
+    public static final Identifier PLAYER_DIED = Identifier.fromNamespaceAndPath("questapi", "player_died");
+
     private ObjectiveEventKeys() {
     }
 }

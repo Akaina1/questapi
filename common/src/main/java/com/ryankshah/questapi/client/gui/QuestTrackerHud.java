@@ -16,10 +16,12 @@ import net.minecraft.util.FormattedCharSequence;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.OptionalLong;
 
 /**
- * Renders the player's pinned quest (see {@link ClientQuestDataCache#toggleTracked}) in the top
- * right corner of the HUD, so its objectives stay visible without reopening the quest book.
+ * Renders the player's pinned quests (see {@link ClientQuestDataCache#toggleTracked}), at most
+ * {@link ClientQuestDataCache#MAX_TRACKED}, stacked in the top right corner of the HUD, so their
+ * objectives stay visible without reopening the quest book.
  * Registered as a HUD element/layer by each loader's client bootstrap; identical on both since
  * Fabric's {@code HudElement} and NeoForge's {@code GuiLayer} share this exact render signature.
  */
@@ -29,6 +31,8 @@ public final class QuestTrackerHud {
     private static final int LINE_HEIGHT = 10;
     private static final int BAR_HEIGHT = 3;
     private static final int WIDTH = 140;
+    private static final int BLOCK_GAP = 8;
+    private static final float HUD_SCALE = 0.75f;
 
     private QuestTrackerHud() {
     }
@@ -39,18 +43,40 @@ public final class QuestTrackerHud {
             return;
         }
         ClientQuestDataCache cache = ClientQuestDataCache.INSTANCE;
-        Identifier trackedId = cache.trackedQuestId();
-        if (trackedId == null) {
+        List<Identifier> trackedIds = cache.trackedQuestIds();
+        if (trackedIds.isEmpty()) {
             return;
         }
-        Quest quest = cache.getQuest(trackedId).orElse(null);
-        if (quest == null || cache.getState(trackedId) != QuestState.ACTIVE) {
-            return;
+
+        int x = Math.round(minecraft.getWindow().getGuiScaledWidth() / HUD_SCALE) - WIDTH - MARGIN;
+        int y = MARGIN;
+
+        graphics.pose().pushMatrix();
+        graphics.pose().scale(HUD_SCALE, HUD_SCALE);
+        try {
+            for (Identifier trackedId : trackedIds) {
+                Quest quest = cache.getQuest(trackedId).orElse(null);
+                if (quest == null || cache.getState(trackedId) != QuestState.ACTIVE) {
+                    continue;
+                }
+                y = renderQuest(graphics, minecraft.font, cache, quest, x, y) + BLOCK_GAP;
+            }
+        } finally {
+            graphics.pose().popMatrix();
         }
-        QuestProgress progress = cache.getProgress(trackedId);
-        Font font = minecraft.font;
+    }
+
+    /**
+     * Draws one tracked quest's block at ({@code x}, {@code y}) and returns the Y just below it.
+     */
+    private static int renderQuest(GuiGraphicsExtractor graphics, Font font, ClientQuestDataCache cache, Quest quest, int x, int y) {
+        QuestProgress progress = cache.getProgress(quest.id());
 
         List<FormattedCharSequence> titleLines = font.split(quest.title(), WIDTH);
+        OptionalLong remainingTicks = cache.remainingLimitTicks(quest);
+        List<FormattedCharSequence> timeLines = remainingTicks.isPresent()
+                ? font.split(QuestGuiText.timeRemainingLabel(quest, remainingTicks.getAsLong(), cache.ticksPerGameDay()), WIDTH)
+                : List.of();
         List<List<FormattedCharSequence>> objectiveLines = new ArrayList<>();
         List<Integer> shownObjectives = new ArrayList<>();
         List<ObjectiveDefinition> objectives = quest.objectives();
@@ -66,20 +92,20 @@ public final class QuestTrackerHud {
             shownObjectives.add(i);
         }
 
-        int contentHeight = titleLines.size() * LINE_HEIGHT + 2;
+        int contentHeight = titleLines.size() * LINE_HEIGHT + timeLines.size() * LINE_HEIGHT + 2;
         for (List<FormattedCharSequence> lines : objectiveLines) {
             contentHeight += lines.size() * LINE_HEIGHT + BAR_HEIGHT + 2;
         }
-
-        int screenWidth = minecraft.getWindow().getGuiScaledWidth();
-        int x = screenWidth - WIDTH - MARGIN;
-        int y = MARGIN;
 
         graphics.fill(x - 4, y - 3, x + WIDTH + 4, y + contentHeight + 3, 0x90202020);
 
         int cursorY = y;
         for (FormattedCharSequence line : titleLines) {
             graphics.text(font, line, x, cursorY, 0xFFFFD83C);
+            cursorY += LINE_HEIGHT;
+        }
+        for (FormattedCharSequence line : timeLines) {
+            graphics.text(font, line, x, cursorY, 0xFFFFAA00);
             cursorY += LINE_HEIGHT;
         }
         cursorY += 2;
@@ -103,5 +129,6 @@ public final class QuestTrackerHud {
             }
             cursorY += BAR_HEIGHT + 2;
         }
+        return cursorY;
     }
 }

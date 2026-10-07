@@ -13,15 +13,21 @@ import net.minecraft.resources.Identifier;
  * Sent to a client when their quest's rewards are claimed (the quest becomes {@code REWARDED}),
  * purely to drive a "quest completed" toast and sound.
  *
+ * @param toastTitle the toast's title line, already resolved on the server (the quest's
+ *                   {@code toast_overrides.completed} or the default)
  * @param questTitle the title of the quest that was turned in
  */
-public record ClientboundQuestRewardedPayload(Component questTitle) implements CustomPacketPayload {
+public record ClientboundQuestRewardedPayload(Component toastTitle, Component questTitle) implements CustomPacketPayload {
 
     public static final CustomPacketPayload.Type<ClientboundQuestRewardedPayload> TYPE =
             new CustomPacketPayload.Type<>(Identifier.fromNamespaceAndPath(QuestApi.MOD_ID, "quest_rewarded"));
 
-    public static final StreamCodec<ByteBuf, ClientboundQuestRewardedPayload> STREAM_CODEC =
-            ByteBufCodecs.fromCodec(ComponentSerialization.CODEC).map(ClientboundQuestRewardedPayload::new, ClientboundQuestRewardedPayload::questTitle);
+    private static final StreamCodec<ByteBuf, Component> COMPONENT = ByteBufCodecs.fromCodec(ComponentSerialization.CODEC);
+
+    public static final StreamCodec<ByteBuf, ClientboundQuestRewardedPayload> STREAM_CODEC = StreamCodec.composite(
+            COMPONENT, ClientboundQuestRewardedPayload::toastTitle,
+            COMPONENT, ClientboundQuestRewardedPayload::questTitle,
+            ClientboundQuestRewardedPayload::new);
 
     @Override
     public CustomPacketPayload.Type<ClientboundQuestRewardedPayload> type() {

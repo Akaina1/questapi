@@ -64,7 +64,9 @@ public interface QuestManager {
     /**
      * Fails an {@code ACTIVE} quest, moving it to {@code FAILED} and keeping its objective progress
      * for display. No-op (returns {@code false}) if the quest is not active. A failed quest only
-     * leaves that state through {@link #resetQuest}.
+     * leaves that state through {@link #resetQuest}, except for quests whose failure rules mark them
+     * retryable: those are reset immediately after the failure listeners have run. Quests that
+     * depend on this quest being failed are unlocked right away.
      */
     boolean failQuest(ServerPlayer player, Identifier questId);
 

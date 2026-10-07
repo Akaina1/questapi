@@ -8,6 +8,7 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Immutable, static definition of a quest: its identity, presentation, objectives, rewards and
@@ -18,35 +19,26 @@ import java.util.List;
 public final class Quest {
 
     private final Identifier id;
-    private final Component title;
-    private final Component description;
-    private final ItemStack icon;
     private final Identifier categoryId;
+    private final QuestDisplay display;
+    private final QuestLifecycle lifecycle;
     private final List<ObjectiveDefinition> objectives;
     private final List<QuestReward> rewards;
     private final List<QuestCondition> prerequisites;
-    private final boolean autoActivate;
-    private final int sortOrder;
-    private final boolean repeatable;
-    private final ResetMode resetMode;
-    private final int resetAmount;
-    private final boolean sequential;
+    private final Optional<QuestFailureRules> failure;
+    private final Optional<QuestToastOverrides> toastOverrides;
 
     private Quest(Builder builder) {
         this.id = builder.id;
-        this.title = builder.title;
-        this.description = builder.description;
-        this.icon = builder.icon;
         this.categoryId = builder.categoryId;
+        this.display = new QuestDisplay(builder.title, builder.description, builder.icon, builder.sortOrder);
+        this.lifecycle = new QuestLifecycle(builder.autoActivate, builder.sequential,
+                builder.repeatable ? Optional.of(new QuestRepeat(builder.resetMode, builder.resetAmount)) : Optional.empty());
         this.objectives = List.copyOf(builder.objectives);
         this.rewards = List.copyOf(builder.rewards);
         this.prerequisites = List.copyOf(builder.prerequisites);
-        this.autoActivate = builder.autoActivate;
-        this.sortOrder = builder.sortOrder;
-        this.repeatable = builder.repeatable;
-        this.resetMode = builder.resetMode;
-        this.resetAmount = builder.resetAmount;
-        this.sequential = builder.sequential;
+        this.failure = Optional.ofNullable(builder.failure);
+        this.toastOverrides = Optional.ofNullable(builder.toastOverrides);
     }
 
     public static Builder builder(Identifier id) {
@@ -57,16 +49,44 @@ public final class Quest {
         return id;
     }
 
+    /**
+     * The presentation group (title, description, icon, sort order).
+     */
+    public QuestDisplay display() {
+        return display;
+    }
+
+    /**
+     * The behaviour group (auto-activation, sequential objectives, repeat cooldown).
+     */
+    public QuestLifecycle lifecycle() {
+        return lifecycle;
+    }
+
+    /**
+     * How this quest can fail, or empty if it only fails through {@code QuestManager#failQuest}.
+     */
+    public Optional<QuestFailureRules> failure() {
+        return failure;
+    }
+
+    /**
+     * Per-quest replacements for the default toast titles, if any.
+     */
+    public Optional<QuestToastOverrides> toastOverrides() {
+        return toastOverrides;
+    }
+
     public Component title() {
-        return title;
+        return display.title();
     }
 
     public Component description() {
-        return description;
+        return display.description();
     }
 
     public ItemStack icon() {
-        return icon;
+        return display.icon();
     }
 
     public Identifier categoryId() {
@@ -90,14 +110,22 @@ public final class Quest {
      * moment its prerequisites are satisfied, without requiring the player to manually start it.
      */
     public boolean autoActivate() {
-        return autoActivate;
+        return lifecycle.autoActivate();
     }
 
     /**
      * Lower values are displayed first within a category.
      */
     public int sortOrder() {
-        return sortOrder;
+        return display.sortOrder();
+    }
+
+    /**
+     * Whether a failed instance of this quest is reset straight back to its starting state. Quests
+     * without failure rules are not retryable.
+     */
+    public boolean retryable() {
+        return failure.map(QuestFailureRules::retryable).orElse(false);
     }
 
     /**
@@ -105,7 +133,7 @@ public final class Quest {
      * rewarded, instead of staying in the terminal {@code REWARDED} state forever.
      */
     public boolean repeatable() {
-        return repeatable;
+        return lifecycle.repeat().isPresent();
     }
 
     /**
@@ -113,7 +141,7 @@ public final class Quest {
      * (see {@code questapi.properties}). Meaningless unless {@link #repeatable()} is {@code true}.
      */
     public ResetMode resetMode() {
-        return resetMode;
+        return lifecycle.repeat().map(QuestRepeat::resetMode).orElse(null);
     }
 
     /**
@@ -122,7 +150,7 @@ public final class Quest {
      * is {@code true}.
      */
     public int resetAmount() {
-        return resetAmount;
+        return lifecycle.repeat().map(QuestRepeat::amount).orElse(0);
     }
 
     /**
@@ -133,7 +161,7 @@ public final class Quest {
      * @see QuestProgress#objectiveUnlocked(Quest, int)
      */
     public boolean sequential() {
-        return sequential;
+        return lifecycle.sequential();
     }
 
     public static final class Builder {
@@ -151,6 +179,8 @@ public final class Quest {
         private ResetMode resetMode = null;
         private int resetAmount = 0;
         private boolean sequential = false;
+        private QuestFailureRules failure = null;
+        private QuestToastOverrides toastOverrides = null;
 
         private Builder(Identifier id) {
             this.id = id;
@@ -221,6 +251,22 @@ public final class Quest {
          */
         public Builder sequential(boolean sequential) {
             this.sequential = sequential;
+            return this;
+        }
+
+        /**
+         * Sets how this quest can fail (retry behaviour, time limit, fail triggers, reason).
+         */
+        public Builder failure(QuestFailureRules failure) {
+            this.failure = failure;
+            return this;
+        }
+
+        /**
+         * Replaces the title line of this quest's default toasts.
+         */
+        public Builder toastOverrides(QuestToastOverrides toastOverrides) {
+            this.toastOverrides = toastOverrides;
             return this;
         }
 

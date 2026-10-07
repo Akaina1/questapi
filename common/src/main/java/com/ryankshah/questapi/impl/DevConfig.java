@@ -30,8 +30,13 @@ public final class DevConfig {
     private static final String SHOW_STARTED_TOAST_KEY = "show-quest-started-toast";
     private static final String SHOW_REWARDED_TOAST_KEY = "show-quest-rewarded-toast";
     private static final String SHOW_OBJECTIVE_TOAST_KEY = "show-objective-completed-toast";
+    private static final String SHOW_FAILED_TOAST_KEY = "show-quest-failed-toast";
+    private static final String TICKS_PER_GAME_DAY_KEY = "ticks-per-game-day";
+    private static final int DEFAULT_TICKS_PER_GAME_DAY = 24000;
 
     private static boolean devMode = false;
+    private static int ticksPerGameDay = DEFAULT_TICKS_PER_GAME_DAY;
+    private static boolean showFailedToast = true;
     private static ResetMode defaultResetMode = ResetMode.WALL_CLOCK;
     private static boolean allowManualStart = true;
     private static boolean allowManualAbandon = true;
@@ -120,6 +125,22 @@ public final class DevConfig {
     }
 
     /**
+     * Whether the server tells a player (toast and sound) when a quest fails.
+     */
+    public static boolean showFailedToast() {
+        return showFailedToast;
+    }
+
+    /**
+     * How many ticks of the overworld day clock make one in-game day, used to convert
+     * {@code GAME_DAYS} and {@code GAME_HOURS} quest time limits. Modpacks that change the length
+     * of a day can override the vanilla 24000.
+     */
+    public static int ticksPerGameDay() {
+        return ticksPerGameDay;
+    }
+
+    /**
      * The reset mode a repeatable quest resolves to when it does not specify its own via
      * {@code Quest.Builder#repeatable(ResetMode, int)}.
      */
@@ -152,6 +173,8 @@ public final class DevConfig {
             props.setProperty(SHOW_STARTED_TOAST_KEY, "true");
             props.setProperty(SHOW_REWARDED_TOAST_KEY, "true");
             props.setProperty(SHOW_OBJECTIVE_TOAST_KEY, "true");
+            props.setProperty(SHOW_FAILED_TOAST_KEY, "true");
+            props.setProperty(TICKS_PER_GAME_DAY_KEY, String.valueOf(DEFAULT_TICKS_PER_GAME_DAY));
             try {
                 Files.createDirectories(file.getParent());
             } catch (IOException ignored) {
@@ -166,7 +189,10 @@ public final class DevConfig {
                         + "show-quest-unlocked-toast / show-quest-started-toast / show-quest-completed-toast /\n"
                         + "show-quest-rewarded-toast: set to false to suppress the toast and sound when a quest becomes\n"
                         + "available / is accepted / has all objectives complete (ready to turn in) / has its rewards claimed.\n"
-                        + "show-objective-completed-toast: set to false to suppress the toast when a single objective completes.");
+                        + "show-objective-completed-toast: set to false to suppress the toast when a single objective completes.\n"
+                        + "show-quest-failed-toast: set to false to suppress the toast and sound when a quest fails.\n"
+                        + "ticks-per-game-day: length of an in-game day in ticks of the overworld day clock, used for\n"
+                        + "GAME_DAYS and GAME_HOURS quest time limits (vanilla is 24000).");
             } catch (IOException e) {
                 QuestApi.LOG.warn("Failed to write default questapi.properties", e);
             }
@@ -187,6 +213,8 @@ public final class DevConfig {
         showStartedToast = readBoolean(props, SHOW_STARTED_TOAST_KEY);
         showRewardedToast = readBoolean(props, SHOW_REWARDED_TOAST_KEY);
         showObjectiveCompletedToast = readBoolean(props, SHOW_OBJECTIVE_TOAST_KEY);
+        showFailedToast = readBoolean(props, SHOW_FAILED_TOAST_KEY);
+        ticksPerGameDay = readPositiveInt(props, TICKS_PER_GAME_DAY_KEY, DEFAULT_TICKS_PER_GAME_DAY);
         QuestApi.LOG.info("QuestAPI dev mode: {}, default repeatable-quest reset mode: {}", devMode, defaultResetMode);
         QuestApi.LOG.info("QuestAPI manual quest book actions allowed: start={}, abandon={}, claim={}, deliver={}",
                 allowManualStart, allowManualAbandon, allowManualClaim, allowManualDeliver);
@@ -198,5 +226,17 @@ public final class DevConfig {
      */
     private static boolean readBoolean(Properties props, String key) {
         return Boolean.parseBoolean(props.getProperty(key, "true").trim());
+    }
+
+    private static int readPositiveInt(Properties props, String key, int fallback) {
+        try {
+            int value = Integer.parseInt(props.getProperty(key, String.valueOf(fallback)).trim());
+            if (value > 0) {
+                return value;
+            }
+        } catch (NumberFormatException ignored) {
+        }
+        QuestApi.LOG.warn("Invalid {} in questapi.properties, defaulting to {}", key, fallback);
+        return fallback;
     }
 }

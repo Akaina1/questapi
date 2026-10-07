@@ -3,6 +3,7 @@ package com.ryankshah.questapi.client.gui;
 import com.ryankshah.questapi.api.quest.ManualQuestActions;
 import com.ryankshah.questapi.api.quest.Quest;
 import com.ryankshah.questapi.api.quest.QuestCategory;
+import com.ryankshah.questapi.api.quest.QuestFailureRules;
 import com.ryankshah.questapi.api.quest.QuestProgress;
 import com.ryankshah.questapi.api.quest.QuestState;
 import com.ryankshah.questapi.api.quest.condition.QuestCondition;
@@ -23,6 +24,7 @@ import net.minecraft.resources.Identifier;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.OptionalLong;
 
 /**
  * The default quest book GUI. Purely a consumer of {@link ClientQuestDataCache}: it never computes
@@ -244,7 +246,7 @@ public final class QuestScreen extends Screen {
                             .bounds(detailX, buttonY, detailWidth, 20).build();
                     trackY = buttonY - 22;
                 }
-                boolean tracked = selectedQuest.id().equals(cache.trackedQuestId());
+                boolean tracked = cache.isTracked(selectedQuest.id());
                 Component trackLabel = Component.translatable(tracked ? "questapi.gui.action.untrack" : "questapi.gui.action.track");
                 trackButton = Button.builder(trackLabel, b -> {
                             cache.toggleTracked(selectedQuest.id());
@@ -344,6 +346,25 @@ public final class QuestScreen extends Screen {
         cursorY = Math.max(cursorY, y + 12);
         cursorY = drawWrapped(graphics, QuestGuiText.stateLabel(quest, state), x + 22, cursorY, titleTextWidth, QuestGuiText.stateColor(state));
         cursorY += 2;
+
+        QuestFailureRules failureRules = quest.failure().orElse(null);
+        if (failureRules != null) {
+            Component limitLabel = QuestGuiText.timeLimitLabel(quest);
+            if (limitLabel != null) {
+                cursorY = drawWrapped(graphics, limitLabel, x, cursorY, width, 0xFFAAAAAA);
+            }
+            OptionalLong remainingTicks = cache.remainingLimitTicks(quest);
+            if (remainingTicks.isPresent()) {
+                cursorY = drawWrapped(graphics, QuestGuiText.timeRemainingLabel(quest, remainingTicks.getAsLong(), cache.ticksPerGameDay()),
+                        x, cursorY, width, 0xFFFFAA00);
+            }
+            cursorY = drawWrapped(graphics, QuestGuiText.retryLabel(failureRules), x, cursorY, width, 0xFF999999);
+            Component failureReason = failureRules.reason().orElse(null);
+            if (state == QuestState.FAILED && failureReason != null) {
+                cursorY = drawWrapped(graphics, failureReason, x, cursorY, width, 0xFFFF8888);
+            }
+            cursorY += 2;
+        }
 
         cursorY = drawWrapped(graphics, quest.description(), x, cursorY, width, 0xFFCCCCCC);
         cursorY += 4;

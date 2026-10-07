@@ -7,6 +7,7 @@ import com.ryankshah.questapi.client.gui.QuestTrackerHud;
 import com.ryankshah.questapi.client.network.ClientQuestNetworking;
 import com.ryankshah.questapi.impl.network.payload.ClientboundObjectiveCompletedPayload;
 import com.ryankshah.questapi.impl.network.payload.ClientboundQuestCompletedPayload;
+import com.ryankshah.questapi.impl.network.payload.ClientboundQuestFailedPayload;
 import com.ryankshah.questapi.impl.network.payload.ClientboundQuestRewardedPayload;
 import com.ryankshah.questapi.impl.network.payload.ClientboundQuestStartedPayload;
 import com.ryankshah.questapi.impl.network.payload.ClientboundQuestUnlockedPayload;
@@ -36,13 +37,15 @@ public class QuestApiFabricClient implements ClientModInitializer {
         ClientPlayNetworking.registerGlobalReceiver(ClientboundSyncProgressPayload.TYPE,
                 (payload, context) -> ClientQuestNetworking.handleSyncProgress(payload.data()));
         ClientPlayNetworking.registerGlobalReceiver(ClientboundQuestCompletedPayload.TYPE,
-                (payload, context) -> ClientQuestNetworking.handleQuestCompleted(payload.questTitle()));
+                (payload, context) -> ClientQuestNetworking.handleQuestCompleted(payload.toastTitle(), payload.questTitle()));
         ClientPlayNetworking.registerGlobalReceiver(ClientboundQuestUnlockedPayload.TYPE,
                 (payload, context) -> ClientQuestNetworking.handleQuestUnlocked(payload.questTitle()));
         ClientPlayNetworking.registerGlobalReceiver(ClientboundQuestStartedPayload.TYPE,
-                (payload, context) -> ClientQuestNetworking.handleQuestStarted(payload.questTitle()));
+                (payload, context) -> ClientQuestNetworking.handleQuestStarted(payload.toastTitle(), payload.questTitle()));
         ClientPlayNetworking.registerGlobalReceiver(ClientboundQuestRewardedPayload.TYPE,
-                (payload, context) -> ClientQuestNetworking.handleQuestRewarded(payload.questTitle()));
+                (payload, context) -> ClientQuestNetworking.handleQuestRewarded(payload.toastTitle(), payload.questTitle()));
+        ClientPlayNetworking.registerGlobalReceiver(ClientboundQuestFailedPayload.TYPE,
+                (payload, context) -> ClientQuestNetworking.handleQuestFailed(payload.toastTitle(), payload.questTitle()));
         ClientPlayNetworking.registerGlobalReceiver(ClientboundObjectiveCompletedPayload.TYPE,
                 (payload, context) -> ClientQuestNetworking.handleObjectiveCompleted(payload.objectiveDescription()));
 

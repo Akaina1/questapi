@@ -1,16 +1,22 @@
 {
   "id": "examplequests:json_quest_demo",
-  "title": {
-    "text": "A Quest From JSON"
-  },
-  "description": {
-    "text": "This quest is defined entirely in a datapack JSON file, not Java code - proof the API supports both."
-  },
-  "icon": {
-    "id": "minecraft:paper",
-    "count": 1
-  },
   "category": "examplequests:json_demo",
+  "display": {
+    "title": {
+      "text": "A Quest From JSON"
+    },
+    "description": {
+      "text": "This quest is defined entirely in a datapack JSON file, not Java code - proof the API supports both."
+    },
+    "icon": {
+      "id": "minecraft:paper",
+      "count": 1
+    },
+    "sort_order": 0
+  },
+  "lifecycle": {
+    "auto_activate": true
+  },
   "objectives": [
     {
       "type": "questapi:collect_item",
@@ -24,7 +30,5 @@
       "points": 15
     }
   ],
-  "prerequisites": [],
-  "auto_activate": true,
-  "sort_order": 0
+  "prerequisites": []
 }

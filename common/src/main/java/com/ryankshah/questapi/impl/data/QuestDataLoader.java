@@ -5,8 +5,11 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.JsonOps;
 import com.ryankshah.questapi.QuestApi;
 import com.ryankshah.questapi.api.QuestRegistry;
+import com.ryankshah.questapi.api.quest.FailTrigger;
 import com.ryankshah.questapi.api.quest.Quest;
 import com.ryankshah.questapi.api.quest.QuestCategory;
+import com.ryankshah.questapi.api.quest.condition.QuestCondition;
+import com.ryankshah.questapi.api.quest.condition.impl.QuestFailedCondition;
 import com.ryankshah.questapi.example.ExampleQuests;
 import com.ryankshah.questapi.impl.DevConfig;
 import com.ryankshah.questapi.impl.network.QuestCodecs;
@@ -20,6 +23,7 @@ import net.minecraft.util.profiling.ProfilerFiller;
 
 import java.io.IOException;
 import java.io.Reader;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -110,10 +114,36 @@ public final class QuestDataLoader extends SimplePreparableReloadListener<QuestD
             previousQuests.add(quest.id());
         }
 
+        validateFailureRules(quests.values(), registry);
+
         if (!categories.isEmpty() || !quests.isEmpty()) {
             QuestApi.LOG.info("Loaded {} quest categor{} and {} quest{} from datapacks",
                     categories.size(), categories.size() == 1 ? "y" : "ies",
                     quests.size(), quests.size() == 1 ? "" : "s");
+        }
+    }
+
+    /**
+     * Logs a warning for failure setups that can never work as written: a {@code during_step} that
+     * points past the quest's last objective, and a {@code quest_failed} prerequisite on a
+     * retryable quest (which is reset straight after failing, so it never stays failed).
+     */
+    private static void validateFailureRules(Collection<Quest> quests, QuestRegistry registry) {
+        for (Quest quest : quests) {
+            quest.failure().ifPresent(rules -> {
+                for (FailTrigger trigger : rules.failOn()) {
+                    trigger.duringStep().filter(step -> step >= quest.objectives().size()).ifPresent(step ->
+                            QuestApi.LOG.warn("Quest '{}' fails on '{}' during step {}, but it only has {} objective(s)",
+                                    quest.id(), trigger.event(), step, quest.objectives().size()));
+                }
+            });
+            for (QuestCondition condition : quest.prerequisites()) {
+                if (condition instanceof QuestFailedCondition failed
+                        && registry.getQuest(failed.requiredQuestId()).filter(Quest::retryable).isPresent()) {
+                    QuestApi.LOG.warn("Quest '{}' requires quest '{}' to fail, but that quest is retryable and is reset as soon as it fails",
+                            quest.id(), failed.requiredQuestId());
+                }
+            }
         }
     }
 

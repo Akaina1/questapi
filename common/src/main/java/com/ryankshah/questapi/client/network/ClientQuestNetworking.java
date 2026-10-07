@@ -26,25 +26,32 @@ public final class ClientQuestNetworking {
     }
 
     public static void handleSyncDefinitions(ClientboundSyncDefinitionsPayload payload) {
-        ClientQuestDataCache.INSTANCE.setDefinitions(payload.categories(), payload.quests(), payload.manualActions());
+        ClientQuestDataCache.INSTANCE.setDefinitions(payload.categories(), payload.quests(), payload.manualActions(), payload.ticksPerGameDay());
     }
 
     public static void handleSyncProgress(PlayerQuestData data) {
         ClientQuestDataCache.INSTANCE.setProgress(data);
     }
 
-    public static void handleQuestCompleted(Component questTitle) {
+    public static void handleQuestCompleted(Component toastTitle, Component questTitle) {
         Minecraft minecraft = Minecraft.getInstance();
         minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.PLAYER_LEVELUP, 1.0F));
         SystemToast.add(minecraft.gui.toastManager(), SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
-                Component.translatable("questapi.toast.quest_ready.title"), questTitle);
+                toastTitle, questTitle);
     }
 
-    public static void handleQuestRewarded(Component questTitle) {
+    public static void handleQuestRewarded(Component toastTitle, Component questTitle) {
         Minecraft minecraft = Minecraft.getInstance();
         minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.PLAYER_LEVELUP, 1.0F));
         SystemToast.add(minecraft.gui.toastManager(), SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
-                Component.translatable("questapi.toast.quest_rewarded.title"), questTitle);
+                toastTitle, questTitle);
+    }
+
+    public static void handleQuestFailed(Component toastTitle, Component questTitle) {
+        Minecraft minecraft = Minecraft.getInstance();
+        minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.ANVIL_LAND, 0.6F));
+        SystemToast.add(minecraft.gui.toastManager(), SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
+                toastTitle, questTitle);
     }
 
     public static void handleObjectiveCompleted(Component objectiveDescription) {
@@ -61,11 +68,11 @@ public final class ClientQuestNetworking {
                 Component.translatable("questapi.toast.quest_unlocked.title"), questTitle);
     }
 
-    public static void handleQuestStarted(Component questTitle) {
+    public static void handleQuestStarted(Component toastTitle, Component questTitle) {
         Minecraft minecraft = Minecraft.getInstance();
         minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.EXPERIENCE_ORB_PICKUP, 1.0F));
         SystemToast.add(minecraft.gui.toastManager(), SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
-                Component.translatable("questapi.toast.quest_started.title"), questTitle);
+                toastTitle, questTitle);
     }
 
     public static void requestSync() {

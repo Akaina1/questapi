@@ -1,5 +1,6 @@
 package com.ryankshah.questapi;
 
+import com.ryankshah.questapi.api.quest.objective.ObjectiveEventKeys;
 import com.ryankshah.questapi.command.QuestCommands;
 import com.ryankshah.questapi.example.ExampleQuests;
 import com.ryankshah.questapi.impl.DevConfig;
@@ -7,6 +8,7 @@ import com.ryankshah.questapi.impl.data.QuestDataLoader;
 import com.ryankshah.questapi.impl.network.QuestNetworking;
 import com.ryankshah.questapi.impl.network.payload.ClientboundObjectiveCompletedPayload;
 import com.ryankshah.questapi.impl.network.payload.ClientboundQuestCompletedPayload;
+import com.ryankshah.questapi.impl.network.payload.ClientboundQuestFailedPayload;
 import com.ryankshah.questapi.impl.network.payload.ClientboundQuestRewardedPayload;
 import com.ryankshah.questapi.impl.network.payload.ClientboundQuestStartedPayload;
 import com.ryankshah.questapi.impl.network.payload.ClientboundQuestUnlockedPayload;
@@ -19,6 +21,7 @@ import com.ryankshah.questapi.impl.network.payload.ServerboundRequestSyncPayload
 import com.ryankshah.questapi.impl.network.payload.ServerboundStartQuestPayload;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
+import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
@@ -45,6 +48,7 @@ public class QuestApiFabric implements ModInitializer {
         PayloadTypeRegistry.clientboundPlay().register(ClientboundQuestUnlockedPayload.TYPE, ClientboundQuestUnlockedPayload.STREAM_CODEC);
         PayloadTypeRegistry.clientboundPlay().register(ClientboundQuestStartedPayload.TYPE, ClientboundQuestStartedPayload.STREAM_CODEC);
         PayloadTypeRegistry.clientboundPlay().register(ClientboundQuestRewardedPayload.TYPE, ClientboundQuestRewardedPayload.STREAM_CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(ClientboundQuestFailedPayload.TYPE, ClientboundQuestFailedPayload.STREAM_CODEC);
         PayloadTypeRegistry.clientboundPlay().register(ClientboundObjectiveCompletedPayload.TYPE, ClientboundObjectiveCompletedPayload.STREAM_CODEC);
         PayloadTypeRegistry.serverboundPlay().register(ServerboundRequestSyncPayload.TYPE, ServerboundRequestSyncPayload.STREAM_CODEC);
         PayloadTypeRegistry.serverboundPlay().register(ServerboundStartQuestPayload.TYPE, ServerboundStartQuestPayload.STREAM_CODEC);
@@ -68,6 +72,12 @@ public class QuestApiFabric implements ModInitializer {
         ServerTickEvents.END_SERVER_TICK.register(server -> {
             for (ServerPlayer player : server.getPlayerList().getPlayers()) {
                 QuestApi.manager().tickObjectives(player);
+            }
+        });
+
+        ServerLivingEntityEvents.AFTER_DEATH.register((entity, source) -> {
+            if (entity instanceof ServerPlayer player) {
+                QuestApi.manager().pushObjectiveEvent(player, ObjectiveEventKeys.PLAYER_DIED, 1);
             }
         });
 

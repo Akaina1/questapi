@@ -2,12 +2,16 @@ package com.ryankshah.questapi.impl;
 
 import com.ryankshah.questapi.api.QuestManager;
 import com.ryankshah.questapi.api.QuestRegistry;
+import com.ryankshah.questapi.api.quest.FailTrigger;
 import com.ryankshah.questapi.api.quest.PlayerQuestData;
 import com.ryankshah.questapi.api.quest.Quest;
 import com.ryankshah.questapi.api.quest.QuestContext;
+import com.ryankshah.questapi.api.quest.QuestFailureRules;
 import com.ryankshah.questapi.api.quest.QuestProgress;
 import com.ryankshah.questapi.api.quest.QuestState;
+import com.ryankshah.questapi.api.quest.QuestTimeLimit;
 import com.ryankshah.questapi.api.quest.ResetMode;
+import com.ryankshah.questapi.api.quest.TimeLimitUnit;
 import com.ryankshah.questapi.api.quest.condition.QuestCondition;
 import com.ryankshah.questapi.api.quest.event.QuestEventListener;
 import com.ryankshah.questapi.api.quest.event.QuestEvents;
@@ -18,17 +22,41 @@ import com.ryankshah.questapi.api.quest.objective.impl.DeliverItemObjective;
 import com.ryankshah.questapi.impl.persistence.QuestSavedData;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 public final class QuestManagerImpl implements QuestManager {
 
+    /**
+     * Identifies one player's running timer for one quest.
+     */
+    private record TimerKey(UUID player, Identifier quest) {
+    }
+
+    /**
+     * The clocks as last read for a timer, so only genuinely elapsed time is counted. The game time
+     * lets a sample left over from before the player logged out be recognised and discarded.
+     */
+    private record ClockSample(long clockTime, long gameTime) {
+    }
+
+    /**
+     * A sample older than this many ticks means the timer was not being ticked (the player was
+     * offline), so the clock difference since then must not be charged to the quest.
+     */
+    private static final long MAX_SAMPLE_AGE_TICKS = 2L;
+
     private final QuestRegistry registry;
+    private final Map<TimerKey, ClockSample> clockSamples = new HashMap<>();
     private MinecraftServer server;
     private QuestSavedData savedData;
 
@@ -46,6 +74,7 @@ public final class QuestManagerImpl implements QuestManager {
     public void detachServer() {
         this.server = null;
         this.savedData = null;
+        this.clockSamples.clear();
     }
 
     @Override
@@ -128,6 +157,8 @@ public final class QuestManagerImpl implements QuestManager {
         }
         progress.setState(QuestState.ACTIVE);
         progress.setStartedAt(System.currentTimeMillis());
+        progress.setElapsedTicks(0L);
+        clockSamples.remove(new TimerKey(player.getUUID(), quest.id()));
         for (QuestEventListener listener : QuestEvents.listeners()) {
             listener.onQuestStarted(player, quest);
         }
@@ -173,11 +204,102 @@ public final class QuestManagerImpl implements QuestManager {
             return false;
         }
         progress.setState(QuestState.FAILED);
+        clockSamples.remove(new TimerKey(player.getUUID(), questId));
         markDirty();
         for (QuestEventListener listener : QuestEvents.listeners()) {
             listener.onQuestFailed(player, quest);
         }
+        if (quest.retryable()) {
+            resetQuest(player, questId);
+        } else {
+            refreshAvailability(player);
+        }
         return true;
+    }
+
+    /**
+     * Whether {@code eventKey} fails {@code quest} right now, per its {@code fail_on} triggers. A
+     * trigger limited to a step only counts while that step is unlocked and still incomplete.
+     */
+    private static boolean triggersFailure(Quest quest, QuestProgress progress, Identifier eventKey) {
+        QuestFailureRules rules = quest.failure().orElse(null);
+        if (rules == null) {
+            return false;
+        }
+        for (FailTrigger trigger : rules.failOn()) {
+            if (!trigger.event().equals(eventKey)) {
+                continue;
+            }
+            if (trigger.duringStep().isEmpty()) {
+                return true;
+            }
+            int step = trigger.duringStep().get();
+            if (step >= quest.objectives().size() || !progress.objectiveUnlocked(quest, step)) {
+                continue;
+            }
+            ObjectiveProgress stepProgress = progress.objectives().get(step);
+            if (stepProgress == null || !stepProgress.complete()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Adds the time this player has spent on each active timed quest and fails any quest whose
+     * limit has run out.
+     */
+    private void checkTimeLimits(ServerPlayer player) {
+        if (server == null) {
+            return;
+        }
+        PlayerQuestData data = dataFor(player);
+        List<Identifier> expired = new ArrayList<>();
+        boolean changed = false;
+        for (Map.Entry<Identifier, QuestProgress> entry : data.progress().entrySet()) {
+            QuestProgress progress = entry.getValue();
+            if (progress.state() != QuestState.ACTIVE) {
+                continue;
+            }
+            Quest quest = registry.getQuest(entry.getKey()).orElse(null);
+            QuestTimeLimit limit = quest == null ? null : quest.failure().flatMap(QuestFailureRules::timeLimit).orElse(null);
+            if (limit == null) {
+                continue;
+            }
+            long elapsed = progress.elapsedTicks() + elapsedSinceLastTick(player, entry.getKey(), limit.unit());
+            if (elapsed != progress.elapsedTicks()) {
+                progress.setElapsedTicks(elapsed);
+                changed = true;
+            }
+            if (elapsed >= limit.unit().toTicks(limit.amount(), DevConfig.ticksPerGameDay())) {
+                expired.add(entry.getKey());
+            }
+        }
+        if (changed) {
+            markDirty();
+        }
+        for (Identifier questId : expired) {
+            failQuest(player, questId);
+        }
+    }
+
+    /**
+     * Ticks of {@code unit}'s clock that passed since this timer was last ticked. Day-clock units
+     * only ever count forward movement of the overworld clock, so sleeping counts, a paused clock
+     * counts nothing, and setting the time backwards never extends a deadline.
+     */
+    private long elapsedSinceLastTick(ServerPlayer player, Identifier questId, TimeLimitUnit unit) {
+        if (!unit.usesDayClock()) {
+            return 1L;
+        }
+        ServerLevel overworld = server.overworld();
+        long clockTime = overworld.getOverworldClockTime();
+        long gameTime = overworld.getGameTime();
+        ClockSample previous = clockSamples.put(new TimerKey(player.getUUID(), questId), new ClockSample(clockTime, gameTime));
+        if (previous == null || gameTime - previous.gameTime() > MAX_SAMPLE_AGE_TICKS) {
+            return 0L;
+        }
+        return Math.max(0L, clockTime - previous.clockTime());
     }
 
     @Override
@@ -274,6 +396,7 @@ public final class QuestManagerImpl implements QuestManager {
         // so availability needs to be polled here too, not just at login/claim/reset/abandon.
         refreshAvailability(player);
         checkRepeatableResets(player);
+        checkTimeLimits(player);
         applyEvent(player, ObjectiveEventKeys.TICK, 0);
     }
 
@@ -350,6 +473,7 @@ public final class QuestManagerImpl implements QuestManager {
         PlayerQuestData data = dataFor(player);
         QuestContext ctx = new QuestContext(player, this);
         boolean changed = false;
+        List<Identifier> failedQuests = new ArrayList<>();
         for (Map.Entry<Identifier, QuestProgress> entry : data.progress().entrySet()) {
             QuestProgress progress = entry.getValue();
             if (progress.state() != QuestState.ACTIVE) {
@@ -357,6 +481,10 @@ public final class QuestManagerImpl implements QuestManager {
             }
             Quest quest = registry.getQuest(entry.getKey()).orElse(null);
             if (quest == null) {
+                continue;
+            }
+            if (triggersFailure(quest, progress, eventKey)) {
+                failedQuests.add(entry.getKey());
                 continue;
             }
             List<ObjectiveDefinition> objectives = quest.objectives();
@@ -387,6 +515,9 @@ public final class QuestManagerImpl implements QuestManager {
         }
         if (changed) {
             markDirty();
+        }
+        for (Identifier questId : failedQuests) {
+            failQuest(player, questId);
         }
     }
 

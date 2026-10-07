@@ -7,6 +7,7 @@ import com.ryankshah.questapi.api.quest.condition.impl.BiomeCondition;
 import com.ryankshah.questapi.api.quest.condition.impl.ExperienceLevelCondition;
 import com.ryankshah.questapi.api.quest.condition.impl.ItemPossessionCondition;
 import com.ryankshah.questapi.api.quest.condition.impl.QuestCompletedCondition;
+import com.ryankshah.questapi.api.quest.condition.impl.QuestFailedCondition;
 import com.ryankshah.questapi.api.quest.condition.impl.TimeOfDayCondition;
 import com.ryankshah.questapi.api.quest.condition.impl.WeatherCondition;
 import com.ryankshah.questapi.api.quest.objective.impl.BreedAnimalsObjective;
@@ -57,6 +58,7 @@ public final class BuiltinContent {
         registry.registerRewardType(EffectReward.TYPE);
 
         registry.registerConditionType(QuestCompletedCondition.TYPE);
+        registry.registerConditionType(QuestFailedCondition.TYPE);
         registry.registerConditionType(AdvancementCondition.TYPE);
         registry.registerConditionType(ItemPossessionCondition.TYPE);
         registry.registerConditionType(ExperienceLevelCondition.TYPE);

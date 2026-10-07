@@ -19,6 +19,7 @@
   "questapi.reward.effect": "%1$s (%2$ss)",
 
   "questapi.condition.quest_completed": "Requires quest: %1$s",
+  "questapi.condition.quest_failed": "Requires failing quest: %1$s",
   "questapi.condition.advancement": "Requires advancement: %1$s",
   "questapi.condition.item_possession": "Requires: %1$s %2$s",
   "questapi.condition.experience_level": "Requires level %1$s",
@@ -56,6 +57,14 @@
   "questapi.gui.objective.hidden": "???",
   "questapi.gui.empty": "Nothing here yet.",
   "questapi.gui.state.rewarded.repeatable": "Complete (repeats)",
+  "questapi.gui.time_limit": "Time limit: %1$s",
+  "questapi.gui.time_remaining": "Time left: %1$s",
+  "questapi.gui.time.days_hours": "%1$sd %2$sh",
+  "questapi.gui.time.hours": "%1$sh",
+  "questapi.gui.time.limit.game_days": "%1$s day(s)",
+  "questapi.gui.time.limit.game_hours": "%1$s hour(s)",
+  "questapi.gui.retry.yes": "Can be retried",
+  "questapi.gui.retry.no": "Cannot be retried",
 
   "questapi.gui.abandon.confirm.title": "Abandon quest?",
   "questapi.gui.abandon.confirm.message": "Progress on this quest will be lost.",
@@ -65,6 +74,7 @@
   "questapi.toast.quest_rewarded.title": "Quest completed",
   "questapi.toast.quest_unlocked.title": "New quest available",
   "questapi.toast.quest_started.title": "Quest accepted",
+  "questapi.toast.quest_failed.title": "Quest failed",
 
   "key.questapi.open_quests": "Open Quest Book"
 }

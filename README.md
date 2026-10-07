@@ -176,21 +176,35 @@ for the files behind the bundled "JSON Demo" category, reproduced here:
 ```json
 {
   "id": "examplequests:json_quest_demo",
-  "title": { "text": "A Quest From JSON" },
-  "description": { "text": "This quest is defined entirely in a datapack JSON file." },
-  "icon": { "id": "minecraft:paper", "count": 1 },
   "category": "examplequests:json_demo",
+  "display": {
+    "title": { "text": "A Quest From JSON" },
+    "description": { "text": "This quest is defined entirely in a datapack JSON file." },
+    "icon": { "id": "minecraft:paper", "count": 1 },
+    "sort_order": 0
+  },
+  "lifecycle": { "auto_activate": true },
   "objectives": [
     { "type": "questapi:collect_item", "item": "minecraft:paper", "amount": 5 }
   ],
   "rewards": [
     { "type": "questapi:experience", "points": 15 }
   ],
-  "prerequisites": [],
-  "auto_activate": true,
-  "sort_order": 0
+  "prerequisites": []
 }
 ```
+
+A quest is made of nested blocks, each optional unless noted:
+
+- `display` (required): `title`, `description`, `icon`, `sort_order`.
+- `lifecycle`: `auto_activate`, `sequential`, and `repeat` (`reset_mode` optional, `reset_amount`). A quest is repeatable exactly when `repeat` is present.
+- `failure`: `retryable`, `time_limit` (`amount` and `unit`: `GAME_DAYS`, `GAME_HOURS` or `REAL_SECONDS`), `reason`, and `fail_on` (a list of `{ "event": "<event key>", "during_step": <index> }`).
+- `toast_overrides`: `started`, `ready`, `completed` and `failed` replace the title line of the matching toast.
+
+A retryable quest is reset straight back to its starting state when it fails; a non-retry quest stays
+`FAILED` permanently, and the `questapi:quest_failed` condition lets other quests depend on that.
+New quest options go inside the matching block rather than at the top level, because a record codec
+holds at most 16 fields.
 
 Loading happens via an ordinary server data reload listener (`QuestDataLoader`), same as recipes/loot
 tables/advancements - but unlike those, quest JSON only gets *read* there. Item data components

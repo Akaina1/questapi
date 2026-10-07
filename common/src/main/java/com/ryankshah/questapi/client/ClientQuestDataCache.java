@@ -4,12 +4,18 @@ import com.ryankshah.questapi.api.quest.ManualQuestActions;
 import com.ryankshah.questapi.api.quest.PlayerQuestData;
 import com.ryankshah.questapi.api.quest.Quest;
 import com.ryankshah.questapi.api.quest.QuestCategory;
+import com.ryankshah.questapi.api.quest.QuestFailureRules;
 import com.ryankshah.questapi.api.quest.QuestProgress;
 import com.ryankshah.questapi.api.quest.QuestState;
+import com.ryankshah.questapi.api.quest.QuestTimeLimit;
+import net.minecraft.client.Minecraft;
 import net.minecraft.resources.Identifier;
+import net.minecraft.world.level.Level;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.OptionalLong;
 
 /**
  * Client-side cache of the last data synced from the server. This is the <em>only</em> source of
@@ -21,14 +27,23 @@ import java.util.Optional;
  */
 public final class ClientQuestDataCache {
 
+    /** The most quests that can be pinned to the HUD tracker at once. */
+    public static final int MAX_TRACKED = 3;
+
+    private static final int DEFAULT_TICKS_PER_GAME_DAY = 24000;
+
     public static final ClientQuestDataCache INSTANCE = new ClientQuestDataCache();
 
     private List<QuestCategory> categories = List.of();
     private List<Quest> quests = List.of();
     private ManualQuestActions manualActions = ManualQuestActions.ALL;
+    private int ticksPerGameDay = DEFAULT_TICKS_PER_GAME_DAY;
     private PlayerQuestData progress;
     private int revision = 0;
-    private Identifier trackedQuestId;
+    private final List<Identifier> trackedQuestIds = new ArrayList<>();
+    private boolean clockStamped = false;
+    private long syncedClockTime = 0L;
+    private long syncedGameTime = 0L;
 
     private ClientQuestDataCache() {
     }
@@ -41,10 +56,11 @@ public final class ClientQuestDataCache {
         return revision;
     }
 
-    public void setDefinitions(List<QuestCategory> categories, List<Quest> quests, ManualQuestActions manualActions) {
+    public void setDefinitions(List<QuestCategory> categories, List<Quest> quests, ManualQuestActions manualActions, int ticksPerGameDay) {
         this.categories = categories;
         this.quests = quests;
         this.manualActions = manualActions;
+        this.ticksPerGameDay = ticksPerGameDay;
         this.revision++;
     }
 
@@ -58,6 +74,8 @@ public final class ClientQuestDataCache {
 
     public void setProgress(PlayerQuestData progress) {
         this.progress = progress;
+        stampClocks();
+        trackedQuestIds.removeIf(id -> getState(id) != QuestState.ACTIVE);
         this.revision++;
     }
 
@@ -65,8 +83,50 @@ public final class ClientQuestDataCache {
         this.categories = List.of();
         this.quests = List.of();
         this.manualActions = ManualQuestActions.ALL;
+        this.ticksPerGameDay = DEFAULT_TICKS_PER_GAME_DAY;
         this.progress = null;
+        this.clockStamped = false;
         this.revision++;
+    }
+
+    /**
+     * Remembers the client's clocks at the moment progress arrived, so a quest's time limit can be
+     * counted down locally from the elapsed time the server sent along with it.
+     */
+    private void stampClocks() {
+        Level level = Minecraft.getInstance().level;
+        if (level == null) {
+            clockStamped = false;
+            return;
+        }
+        syncedClockTime = level.getOverworldClockTime();
+        syncedGameTime = level.getGameTime();
+        clockStamped = true;
+    }
+
+    /**
+     * How many ticks of its own clock an active quest has left before its time limit fails it, or
+     * empty if the quest has no time limit, is not active, or no clock reading is available yet.
+     */
+    public OptionalLong remainingLimitTicks(Quest quest) {
+        QuestTimeLimit limit = quest.failure().flatMap(QuestFailureRules::timeLimit).orElse(null);
+        Level level = Minecraft.getInstance().level;
+        if (limit == null || level == null || !clockStamped || getState(quest.id()) != QuestState.ACTIVE) {
+            return OptionalLong.empty();
+        }
+        long sinceSync = limit.unit().usesDayClock()
+                ? level.getOverworldClockTime() - syncedClockTime
+                : level.getGameTime() - syncedGameTime;
+        long total = limit.unit().toTicks(limit.amount(), ticksPerGameDay);
+        return OptionalLong.of(Math.max(0L, total - getProgress(quest.id()).elapsedTicks() - Math.max(0L, sinceSync)));
+    }
+
+    /**
+     * The length of an in-game day in ticks as configured on the server, for formatting day-clock
+     * time limits.
+     */
+    public int ticksPerGameDay() {
+        return ticksPerGameDay;
     }
 
     public List<QuestCategory> categories() {
@@ -106,17 +166,29 @@ public final class ClientQuestDataCache {
     }
 
     /**
-     * The quest currently pinned to the in-game HUD tracker, or {@code null} if none is pinned.
-     * Purely a client-side display preference - never synced to the server or other clients.
+     * The quests currently pinned to the in-game HUD tracker, oldest first, at most
+     * {@link #MAX_TRACKED}. Purely a client-side display preference - never synced to the server or
+     * other clients.
      */
-    public Identifier trackedQuestId() {
-        return trackedQuestId;
+    public List<Identifier> trackedQuestIds() {
+        return List.copyOf(trackedQuestIds);
+    }
+
+    public boolean isTracked(Identifier questId) {
+        return trackedQuestIds.contains(questId);
     }
 
     /**
-     * Pins {@code questId} to the HUD tracker, or unpins it if it's already the tracked quest.
+     * Unpins {@code questId} if it is pinned; otherwise pins it, dropping the oldest pinned quest
+     * when the tracker is already full.
      */
     public void toggleTracked(Identifier questId) {
-        this.trackedQuestId = questId.equals(trackedQuestId) ? null : questId;
+        if (trackedQuestIds.remove(questId)) {
+            return;
+        }
+        if (trackedQuestIds.size() >= MAX_TRACKED) {
+            trackedQuestIds.remove(0);
+        }
+        trackedQuestIds.add(questId);
     }
 }

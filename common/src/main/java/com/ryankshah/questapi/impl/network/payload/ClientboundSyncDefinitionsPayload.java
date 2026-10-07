@@ -19,7 +19,8 @@ import java.util.List;
  * server for static content while it is open.
  */
 public record ClientboundSyncDefinitionsPayload(List<QuestCategory> categories, List<Quest> quests,
-                                                ManualQuestActions manualActions) implements CustomPacketPayload {
+                                                ManualQuestActions manualActions,
+                                                int ticksPerGameDay) implements CustomPacketPayload {
 
     public static final CustomPacketPayload.Type<ClientboundSyncDefinitionsPayload> TYPE =
             new CustomPacketPayload.Type<>(Identifier.fromNamespaceAndPath(QuestApi.MOD_ID, "sync_definitions"));
@@ -36,6 +37,7 @@ public record ClientboundSyncDefinitionsPayload(List<QuestCategory> categories, 
             ByteBufCodecs.fromCodec(QuestCategory.CODEC.listOf()), ClientboundSyncDefinitionsPayload::categories,
             ByteBufCodecs.fromCodec(QuestCodecs.questCodec(QuestApi.registry()).listOf()), ClientboundSyncDefinitionsPayload::quests,
             MANUAL_ACTIONS_CODEC, ClientboundSyncDefinitionsPayload::manualActions,
+            ByteBufCodecs.VAR_INT, ClientboundSyncDefinitionsPayload::ticksPerGameDay,
             ClientboundSyncDefinitionsPayload::new
     );
 

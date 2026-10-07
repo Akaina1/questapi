@@ -1,5 +1,6 @@
 package com.ryankshah.questapi;
 
+import com.ryankshah.questapi.api.quest.objective.ObjectiveEventKeys;
 import com.ryankshah.questapi.command.QuestCommands;
 import com.ryankshah.questapi.example.ExampleQuests;
 import com.ryankshah.questapi.impl.DevConfig;
@@ -7,6 +8,7 @@ import com.ryankshah.questapi.impl.data.QuestDataLoader;
 import com.ryankshah.questapi.impl.network.QuestNetworking;
 import com.ryankshah.questapi.impl.network.payload.ClientboundObjectiveCompletedPayload;
 import com.ryankshah.questapi.impl.network.payload.ClientboundQuestCompletedPayload;
+import com.ryankshah.questapi.impl.network.payload.ClientboundQuestFailedPayload;
 import com.ryankshah.questapi.impl.network.payload.ClientboundQuestRewardedPayload;
 import com.ryankshah.questapi.impl.network.payload.ClientboundQuestStartedPayload;
 import com.ryankshah.questapi.impl.network.payload.ClientboundQuestUnlockedPayload;
@@ -24,6 +26,7 @@ import net.neoforged.fml.loading.FMLEnvironment;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.AddServerReloadListenersEvent;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
+import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
@@ -45,6 +48,7 @@ public class QuestApiNeoForge {
         NeoForge.EVENT_BUS.addListener(this::onAddReloadListeners);
         NeoForge.EVENT_BUS.addListener(this::onPlayerLoggedIn);
         NeoForge.EVENT_BUS.addListener(this::onServerTick);
+        NeoForge.EVENT_BUS.addListener(this::onLivingDeath);
         NeoForge.EVENT_BUS.addListener(this::onServerStarting);
         NeoForge.EVENT_BUS.addListener(this::onServerStopping);
         if (DevConfig.isDevMode()) {
@@ -63,13 +67,15 @@ public class QuestApiNeoForge {
         registrar.playToClient(ClientboundSyncProgressPayload.TYPE, ClientboundSyncProgressPayload.STREAM_CODEC,
                 (payload, context) -> com.ryankshah.questapi.client.network.ClientQuestNetworking.handleSyncProgress(payload.data()));
         registrar.playToClient(ClientboundQuestCompletedPayload.TYPE, ClientboundQuestCompletedPayload.STREAM_CODEC,
-                (payload, context) -> com.ryankshah.questapi.client.network.ClientQuestNetworking.handleQuestCompleted(payload.questTitle()));
+                (payload, context) -> com.ryankshah.questapi.client.network.ClientQuestNetworking.handleQuestCompleted(payload.toastTitle(), payload.questTitle()));
         registrar.playToClient(ClientboundQuestUnlockedPayload.TYPE, ClientboundQuestUnlockedPayload.STREAM_CODEC,
                 (payload, context) -> com.ryankshah.questapi.client.network.ClientQuestNetworking.handleQuestUnlocked(payload.questTitle()));
         registrar.playToClient(ClientboundQuestStartedPayload.TYPE, ClientboundQuestStartedPayload.STREAM_CODEC,
-                (payload, context) -> com.ryankshah.questapi.client.network.ClientQuestNetworking.handleQuestStarted(payload.questTitle()));
+                (payload, context) -> com.ryankshah.questapi.client.network.ClientQuestNetworking.handleQuestStarted(payload.toastTitle(), payload.questTitle()));
         registrar.playToClient(ClientboundQuestRewardedPayload.TYPE, ClientboundQuestRewardedPayload.STREAM_CODEC,
-                (payload, context) -> com.ryankshah.questapi.client.network.ClientQuestNetworking.handleQuestRewarded(payload.questTitle()));
+                (payload, context) -> com.ryankshah.questapi.client.network.ClientQuestNetworking.handleQuestRewarded(payload.toastTitle(), payload.questTitle()));
+        registrar.playToClient(ClientboundQuestFailedPayload.TYPE, ClientboundQuestFailedPayload.STREAM_CODEC,
+                (payload, context) -> com.ryankshah.questapi.client.network.ClientQuestNetworking.handleQuestFailed(payload.toastTitle(), payload.questTitle()));
         registrar.playToClient(ClientboundObjectiveCompletedPayload.TYPE, ClientboundObjectiveCompletedPayload.STREAM_CODEC,
                 (payload, context) -> com.ryankshah.questapi.client.network.ClientQuestNetworking.handleObjectiveCompleted(payload.objectiveDescription()));
 
@@ -98,6 +104,12 @@ public class QuestApiNeoForge {
     private void onServerTick(ServerTickEvent.Post event) {
         for (ServerPlayer player : event.getServer().getPlayerList().getPlayers()) {
             QuestApi.manager().tickObjectives(player);
+        }
+    }
+
+    private void onLivingDeath(LivingDeathEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player) {
+            QuestApi.manager().pushObjectiveEvent(player, ObjectiveEventKeys.PLAYER_DIED, 1);
         }
     }
 
