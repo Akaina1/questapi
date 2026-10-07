@@ -24,7 +24,8 @@ public final class QuestProgress {
             Codec.LONG.fieldOf("completedAt").forGetter(QuestProgress::completedAt),
             Codec.LONG.fieldOf("rewardedAt").forGetter(QuestProgress::rewardedAt),
             Codec.LONG.optionalFieldOf("rewardedAtDay", 0L).forGetter(QuestProgress::rewardedAtDay),
-            Codec.LONG.optionalFieldOf("elapsedTicks", 0L).forGetter(QuestProgress::elapsedTicks)
+            Codec.LONG.optionalFieldOf("elapsedTicks", 0L).forGetter(QuestProgress::elapsedTicks),
+            Codec.BOOL.optionalFieldOf("failureRewardsClaimed", false).forGetter(QuestProgress::failureRewardsClaimed)
     ).apply(instance, QuestProgress::new));
 
     private QuestState state;
@@ -34,8 +35,9 @@ public final class QuestProgress {
     private long rewardedAt;
     private long rewardedAtDay;
     private long elapsedTicks;
+    private boolean failureRewardsClaimed;
 
-    public QuestProgress(QuestState state, Map<Integer, ObjectiveProgress> objectives, long startedAt, long completedAt, long rewardedAt, long rewardedAtDay, long elapsedTicks) {
+    public QuestProgress(QuestState state, Map<Integer, ObjectiveProgress> objectives, long startedAt, long completedAt, long rewardedAt, long rewardedAtDay, long elapsedTicks, boolean failureRewardsClaimed) {
         this.state = state;
         this.objectives = new HashMap<>(objectives);
         this.startedAt = startedAt;
@@ -43,10 +45,11 @@ public final class QuestProgress {
         this.rewardedAt = rewardedAt;
         this.rewardedAtDay = rewardedAtDay;
         this.elapsedTicks = elapsedTicks;
+        this.failureRewardsClaimed = failureRewardsClaimed;
     }
 
     public static QuestProgress locked() {
-        return new QuestProgress(QuestState.LOCKED, Map.of(), 0, 0, 0, 0, 0);
+        return new QuestProgress(QuestState.LOCKED, Map.of(), 0, 0, 0, 0, 0, false);
     }
 
     public QuestState state() {
@@ -142,6 +145,28 @@ public final class QuestProgress {
     }
 
     /**
+     * Whether the quest's {@link QuestFailureRules#rewards() failure rewards} were already claimed.
+     * The quest stays {@link QuestState#FAILED} afterwards; this flag is what stops a second claim.
+     */
+    public boolean failureRewardsClaimed() {
+        return failureRewardsClaimed;
+    }
+
+    public void setFailureRewardsClaimed(boolean failureRewardsClaimed) {
+        this.failureRewardsClaimed = failureRewardsClaimed;
+    }
+
+    /**
+     * Whether claiming this quest's rewards would currently grant something: it is
+     * {@link QuestState#COMPLETED}, or it is {@link QuestState#FAILED} with failure rewards that
+     * were not claimed yet. Read-only, so it is safe to call from the client GUI as well.
+     */
+    public boolean claimable(Quest quest) {
+        return state == QuestState.COMPLETED
+                || (state == QuestState.FAILED && !failureRewardsClaimed && !quest.failureRewards().isEmpty());
+    }
+
+    /**
      * Deep copy, safe to hand to something that will read it later (or on another thread) without
      * racing further mutations - e.g. a network payload that gets encoded asynchronously well after
      * the call that queued it returns.
@@ -151,6 +176,6 @@ public final class QuestProgress {
         for (Map.Entry<Integer, ObjectiveProgress> entry : objectives.entrySet()) {
             copiedObjectives.put(entry.getKey(), entry.getValue().copy());
         }
-        return new QuestProgress(state, copiedObjectives, startedAt, completedAt, rewardedAt, rewardedAtDay, elapsedTicks);
+        return new QuestProgress(state, copiedObjectives, startedAt, completedAt, rewardedAt, rewardedAtDay, elapsedTicks, failureRewardsClaimed);
     }
 }

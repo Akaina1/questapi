@@ -259,6 +259,13 @@ public final class QuestScreen extends Screen {
                             .bounds(detailX, buttonY, detailWidth, 20).build();
                 }
             }
+            case FAILED -> {
+                if (allowed.claim() && cache.getProgress(selectedQuest.id()).claimable(selectedQuest)) {
+                    actionButton = Button.builder(Component.translatable("questapi.gui.action.claim"),
+                                    b -> ClientQuestNetworking.requestClaimReward(selectedQuest.id()))
+                            .bounds(detailX, buttonY, detailWidth, 20).build();
+                }
+            }
             default -> {
             }
         }
@@ -429,6 +436,15 @@ public final class QuestScreen extends Screen {
         cursorY = drawWrapped(graphics, Component.translatable("questapi.gui.rewards"), x, cursorY, width, 0xFFFFAA00);
         for (QuestReward reward : quest.rewards()) {
             cursorY = drawWrapped(graphics, Component.literal("- ").append(reward.describe()), x, cursorY, width, 0xFFDDDDDD);
+        }
+
+        List<QuestReward> failureRewards = quest.failureRewards();
+        if (!failureRewards.isEmpty()) {
+            cursorY += 4;
+            cursorY = drawWrapped(graphics, Component.translatable("questapi.gui.failure_rewards"), x, cursorY, width, 0xFFFF8888);
+            for (QuestReward reward : failureRewards) {
+                cursorY = drawWrapped(graphics, Component.literal("- ").append(reward.describe()), x, cursorY, width, 0xFFDDDDDD);
+            }
         }
     }
 

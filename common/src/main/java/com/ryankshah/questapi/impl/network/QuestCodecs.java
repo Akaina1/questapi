@@ -117,12 +117,13 @@ public final class QuestCodecs {
         ).apply(instance, FailTrigger::new));
     }
 
-    public static Codec<QuestFailureRules> failureCodec() {
+    public static Codec<QuestFailureRules> failureCodec(QuestRegistry registry) {
         return RecordCodecBuilder.create(instance -> instance.group(
                 Codec.BOOL.optionalFieldOf("retryable", false).forGetter(QuestFailureRules::retryable),
                 timeLimitCodec().optionalFieldOf("time_limit").forGetter(QuestFailureRules::timeLimit),
                 ComponentSerialization.CODEC.optionalFieldOf("reason").forGetter(QuestFailureRules::reason),
-                failTriggerCodec().listOf().optionalFieldOf("fail_on", List.of()).forGetter(QuestFailureRules::failOn)
+                failTriggerCodec().listOf().optionalFieldOf("fail_on", List.of()).forGetter(QuestFailureRules::failOn),
+                rewardCodec(registry).listOf().optionalFieldOf("rewards", List.of()).forGetter(QuestFailureRules::rewards)
         ).apply(instance, QuestFailureRules::new));
     }
 
@@ -151,7 +152,7 @@ public final class QuestCodecs {
                 objectiveCodec(registry).listOf().fieldOf("objectives").forGetter(Quest::objectives),
                 rewardCodec(registry).listOf().optionalFieldOf("rewards", List.of()).forGetter(Quest::rewards),
                 conditionCodec(registry).listOf().optionalFieldOf("prerequisites", List.of()).forGetter(Quest::prerequisites),
-                failureCodec().optionalFieldOf("failure").forGetter(Quest::failure),
+                failureCodec(registry).optionalFieldOf("failure").forGetter(Quest::failure),
                 toastOverridesCodec().optionalFieldOf("toast_overrides").forGetter(Quest::toastOverrides)
         ).apply(instance, (id, category, display, lifecycle, objectives, rewards, prerequisites, failure, toastOverrides) -> {
             Quest.Builder builder = Quest.builder(id)

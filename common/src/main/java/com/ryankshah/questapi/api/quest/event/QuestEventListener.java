@@ -39,6 +39,10 @@ public interface QuestEventListener {
     default void onQuestCompleted(ServerPlayer player, Quest quest) {
     }
 
+    /**
+     * Fired when a quest's rewards are claimed: the normal rewards of a completed quest, or the
+     * failure rewards of a failed one (in which case the quest is still {@code FAILED}).
+     */
     default void onRewardClaimed(ServerPlayer player, Quest quest) {
     }
 

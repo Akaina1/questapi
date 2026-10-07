@@ -334,7 +334,13 @@ public final class QuestManagerImpl implements QuestManager {
         Quest quest = registry.getQuest(questId).orElse(null);
         PlayerQuestData data = dataFor(player);
         QuestProgress progress = data.get(questId);
-        if (quest == null || progress == null || progress.state() != QuestState.COMPLETED) {
+        if (quest == null || progress == null) {
+            return false;
+        }
+        if (progress.state() == QuestState.FAILED) {
+            return claimFailureRewards(player, quest, progress);
+        }
+        if (progress.state() != QuestState.COMPLETED) {
             return false;
         }
         QuestContext ctx = new QuestContext(player, this);
@@ -349,6 +355,26 @@ public final class QuestManagerImpl implements QuestManager {
             listener.onRewardClaimed(player, quest);
         }
         refreshAvailability(player);
+        return true;
+    }
+
+    /**
+     * Grants a failed quest's failure rewards once. The quest stays {@code FAILED} so failure
+     * branching keeps working; only the claimed flag changes.
+     */
+    private boolean claimFailureRewards(ServerPlayer player, Quest quest, QuestProgress progress) {
+        if (progress.failureRewardsClaimed() || quest.failureRewards().isEmpty()) {
+            return false;
+        }
+        QuestContext ctx = new QuestContext(player, this);
+        for (var reward : quest.failureRewards()) {
+            reward.grant(ctx);
+        }
+        progress.setFailureRewardsClaimed(true);
+        markDirty();
+        for (QuestEventListener listener : QuestEvents.listeners()) {
+            listener.onRewardClaimed(player, quest);
+        }
         return true;
     }
 

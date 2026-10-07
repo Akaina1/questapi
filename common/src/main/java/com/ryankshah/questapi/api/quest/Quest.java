@@ -101,6 +101,13 @@ public final class Quest {
         return rewards;
     }
 
+    /**
+     * Rewards claimable once after this quest failed, or an empty list if it has none.
+     */
+    public List<QuestReward> failureRewards() {
+        return failure.map(QuestFailureRules::rewards).orElse(List.of());
+    }
+
     public List<QuestCondition> prerequisites() {
         return prerequisites;
     }

@@ -35,6 +35,7 @@
   "questapi.gui.title": "Quests",
   "questapi.gui.objectives": "Objectives",
   "questapi.gui.rewards": "Rewards",
+  "questapi.gui.failure_rewards": "Rewards if failed",
   "questapi.gui.prerequisites": "Locked - Prerequisites:",
   "questapi.gui.action.start": "Start Quest",
   "questapi.gui.action.abandon": "Abandon Quest",

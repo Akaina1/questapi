@@ -87,6 +87,11 @@ public interface QuestManager {
      * Claims the rewards of a {@code COMPLETED} quest, granting every {@code QuestReward} exactly
      * once and transitioning the quest to {@code REWARDED}. Returns {@code false} if the quest is
      * not completed or its rewards were already claimed.
+     * <p>
+     * A {@code FAILED} quest with {@code failure.rewards} is claimed through the same call: every
+     * failure reward is granted once and the quest stays {@code FAILED} (the claim is remembered
+     * in {@code QuestProgress#failureRewardsClaimed}). Returns {@code false} when there is nothing
+     * left to claim.
      */
     boolean claimRewards(ServerPlayer player, Identifier questId);
 

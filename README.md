@@ -198,11 +198,31 @@ A quest is made of nested blocks, each optional unless noted:
 
 - `display` (required): `title`, `description`, `icon`, `sort_order`.
 - `lifecycle`: `auto_activate`, `sequential`, and `repeat` (`reset_mode` optional, `reset_amount`). A quest is repeatable exactly when `repeat` is present.
-- `failure`: `retryable`, `time_limit` (`amount` and `unit`: `GAME_DAYS`, `GAME_HOURS` or `REAL_SECONDS`), `reason`, and `fail_on` (a list of `{ "event": "<event key>", "during_step": <index> }`).
+- `failure`: `retryable`, `time_limit` (`amount` and `unit`: `GAME_DAYS`, `GAME_HOURS` or `REAL_SECONDS`), `reason`, `fail_on` (a list of `{ "event": "<event key>", "during_step": <index> }`) and `rewards` (same reward entries as the top-level `rewards`, claimed once after the quest failed; see below).
 - `toast_overrides`: `started`, `ready`, `completed` and `failed` replace the title line of the matching toast.
 
 A retryable quest is reset straight back to its starting state when it fails; a non-retry quest stays
 `FAILED` permanently, and the `questapi:quest_failed` condition lets other quests depend on that.
+
+**Failure rewards:** `failure.rewards` takes exactly the same entries as `rewards` (any reward type,
+including third-party ones) and is claimed through the same `QuestManager#claimRewards` call (and the
+same claim packet) as a completed quest's rewards. They are not granted at the moment of failure,
+because many failure triggers (such as `questapi:player_died`) fire while the player cannot receive
+items; the player or a mod claims them afterwards. The quest stays `FAILED` after claiming, so
+`quest_failed` prerequisites keep working, and `QuestProgress#failureRewardsClaimed()` stops a second
+claim. `QuestProgress#claimable(quest)` tells whether a claim would currently grant something
+(completed, or failed with unclaimed failure rewards). Failure rewards only work on non-retryable
+quests, because a retryable quest is reset on failure; the datapack loader warns about that
+combination. The quest book lists them in the detail pane under "Rewards if failed" and, when manual
+claiming is allowed, shows the Claim button on a failed quest until they are claimed.
+
+```json
+"failure": {
+  "retryable": false,
+  "fail_on": [{ "event": "questapi:player_died" }],
+  "rewards": [{ "type": "questapi:item", "stack": { "id": "minecraft:bread", "count": 1 } }]
+}
+```
 New quest options go inside the matching block rather than at the top level, because a record codec
 holds at most 16 fields.
 

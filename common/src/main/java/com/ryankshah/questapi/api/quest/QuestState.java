@@ -25,7 +25,8 @@ package com.ryankshah.questapi.api.quest;
  *     state for UI/analytics purposes.</li>
  *     <li>{@link #FAILED} - the quest was failed by code calling {@code QuestManager#failQuest}
  *     (for example a timer running out or a quest giver dying). Objective progress is kept for
- *     display. The quest only leaves this state via an explicit reset.</li>
+ *     display. The quest only leaves this state via an explicit reset. Failure rewards, if the
+ *     quest defines any, are claimed while it stays in this state.</li>
  * </ul>
  * New values are only ever appended, so anything that stores or sends the ordinal stays valid.
  */

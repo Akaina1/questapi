@@ -125,8 +125,9 @@ public final class QuestDataLoader extends SimplePreparableReloadListener<QuestD
 
     /**
      * Logs a warning for failure setups that can never work as written: a {@code during_step} that
-     * points past the quest's last objective, and a {@code quest_failed} prerequisite on a
-     * retryable quest (which is reset straight after failing, so it never stays failed).
+     * points past the quest's last objective, failure rewards on a retryable quest, and a
+     * {@code quest_failed} prerequisite on a retryable quest (which is reset straight after
+     * failing, so it never stays failed).
      */
     private static void validateFailureRules(Collection<Quest> quests, QuestRegistry registry) {
         for (Quest quest : quests) {
@@ -135,6 +136,10 @@ public final class QuestDataLoader extends SimplePreparableReloadListener<QuestD
                     trigger.duringStep().filter(step -> step >= quest.objectives().size()).ifPresent(step ->
                             QuestApi.LOG.warn("Quest '{}' fails on '{}' during step {}, but it only has {} objective(s)",
                                     quest.id(), trigger.event(), step, quest.objectives().size()));
+                }
+                if (rules.retryable() && !rules.rewards().isEmpty()) {
+                    QuestApi.LOG.warn("Quest '{}' has failure rewards but is retryable, so it is reset as soon as it fails and they can never be claimed",
+                            quest.id());
                 }
             });
             for (QuestCondition condition : quest.prerequisites()) {

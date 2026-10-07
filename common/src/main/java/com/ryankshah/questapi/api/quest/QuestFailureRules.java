@@ -1,5 +1,6 @@
 package com.ryankshah.questapi.api.quest;
 
+import com.ryankshah.questapi.api.quest.reward.QuestReward;
 import net.minecraft.network.chat.Component;
 
 import java.util.List;
@@ -16,7 +17,11 @@ import java.util.Optional;
  * @param timeLimit optional deadline
  * @param reason    optional line shown in the quest detail pane while the quest is failed
  * @param failOn    events that fail the quest while it is active
+ * @param rewards   granted once through {@code QuestManager#claimRewards} on a failed quest, exactly
+ *                  like the quest's normal rewards on a completed one. Only meaningful when
+ *                  {@code retryable} is {@code false}: a retryable quest is reset on failure, which
+ *                  removes the progress there would be to claim from
  */
 public record QuestFailureRules(boolean retryable, Optional<QuestTimeLimit> timeLimit, Optional<Component> reason,
-                                List<FailTrigger> failOn) {
+                                List<FailTrigger> failOn, List<QuestReward> rewards) {
 }
