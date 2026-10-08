@@ -6,8 +6,11 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.ryankshah.questapi.api.quest.QuestContext;
 import com.ryankshah.questapi.api.quest.condition.ConditionType;
 import com.ryankshah.questapi.api.quest.condition.QuestCondition;
+import com.ryankshah.questapi.api.quest.condition.TriggerKeys;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
+
+import java.util.List;
 
 /**
  * Requires the player's current dimension to be in daytime or nighttime, per
@@ -43,6 +46,16 @@ public final class TimeOfDayCondition implements QuestCondition {
     @Override
     public boolean test(QuestContext context) {
         return requiresDay ? context.level().isBrightOutside() : context.level().isDarkOutside();
+    }
+
+    @Override
+    public List<Identifier> triggers() {
+        return List.of(TriggerKeys.TIME_OF_DAY);
+    }
+
+    @Override
+    public boolean live() {
+        return true;
     }
 
     public boolean requiresDay() {

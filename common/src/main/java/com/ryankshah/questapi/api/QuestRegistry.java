@@ -3,6 +3,7 @@ package com.ryankshah.questapi.api;
 import com.mojang.serialization.Codec;
 import com.ryankshah.questapi.api.quest.Quest;
 import com.ryankshah.questapi.api.quest.QuestCategory;
+import com.ryankshah.questapi.api.quest.QuestlineDefinition;
 import com.ryankshah.questapi.api.quest.condition.ConditionType;
 import com.ryankshah.questapi.api.quest.condition.QuestCondition;
 import com.ryankshah.questapi.api.quest.objective.ObjectiveDefinition;
@@ -12,6 +13,7 @@ import com.ryankshah.questapi.api.quest.reward.RewardType;
 import net.minecraft.resources.Identifier;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -50,6 +52,35 @@ public interface QuestRegistry {
 
     Collection<Quest> questsInCategory(Identifier categoryId);
 
+    void registerQuestline(QuestlineDefinition questline);
+
+    Collection<QuestlineDefinition> questlines();
+
+    Optional<QuestlineDefinition> getQuestline(Identifier id);
+
+    /**
+     * Removes a single questline, e.g. when the datapack file that defined it is removed on reload.
+     */
+    void removeQuestline(Identifier id);
+
+    /**
+     * The quests that should be re-evaluated for their unlock toast and auto-activation when
+     * {@code trigger} fires: those with a prerequisite, or an opening condition on one of their
+     * questlines, that lists the key. Built once and shared by every player; empty if none.
+     */
+    List<Quest> questsForTrigger(Identifier trigger);
+
+    /**
+     * The questlines whose {@code closes_when} conditions list {@code trigger}, so a firing of that
+     * key may have just closed them.
+     */
+    List<QuestlineDefinition> questlinesClosedBy(Identifier trigger);
+
+    /**
+     * Every quest in {@code questlineId}, including quests in questlines nested inside it.
+     */
+    List<Quest> questsInQuestline(Identifier questlineId);
+
     <D extends ObjectiveDefinition> void registerObjectiveType(ObjectiveType<D> type);
 
     Optional<ObjectiveType<?>> getObjectiveType(Identifier id);
@@ -79,7 +110,7 @@ public interface QuestRegistry {
     }
 
     /**
-     * Removes every registered quest and category. Intended for dev-mode quest reloading; not
+     * Removes every registered quest, category and questline. Intended for dev-mode quest reloading; not
      * exposed to production commands.
      */
     void clearQuests();

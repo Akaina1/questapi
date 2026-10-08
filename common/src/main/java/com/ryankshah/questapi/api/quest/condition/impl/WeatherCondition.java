@@ -6,9 +6,12 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.ryankshah.questapi.api.quest.QuestContext;
 import com.ryankshah.questapi.api.quest.condition.ConditionType;
 import com.ryankshah.questapi.api.quest.condition.QuestCondition;
+import com.ryankshah.questapi.api.quest.condition.TriggerKeys;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.level.Level;
+
+import java.util.List;
 
 /**
  * Requires the player's current dimension to be experiencing a specific kind of weather.
@@ -47,6 +50,16 @@ public final class WeatherCondition implements QuestCondition {
             case RAIN -> level.isRaining() && !level.isThundering();
             case THUNDER -> level.isThundering();
         };
+    }
+
+    @Override
+    public List<Identifier> triggers() {
+        return List.of(TriggerKeys.WEATHER);
+    }
+
+    @Override
+    public boolean live() {
+        return true;
     }
 
     public WeatherType weather() {

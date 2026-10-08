@@ -5,11 +5,14 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.ryankshah.questapi.api.quest.QuestContext;
 import com.ryankshah.questapi.api.quest.condition.ConditionType;
 import com.ryankshah.questapi.api.quest.condition.QuestCondition;
+import com.ryankshah.questapi.api.quest.condition.TriggerKeys;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.biome.Biome;
+
+import java.util.List;
 
 /**
  * Requires the player to currently be standing in a specific biome.
@@ -43,6 +46,16 @@ public final class BiomeCondition implements QuestCondition {
     @Override
     public boolean test(QuestContext context) {
         return context.level().getBiome(context.player().blockPosition()).is(biome);
+    }
+
+    @Override
+    public List<Identifier> triggers() {
+        return List.of(TriggerKeys.POSITION);
+    }
+
+    @Override
+    public boolean live() {
+        return true;
     }
 
     public ResourceKey<Biome> biome() {

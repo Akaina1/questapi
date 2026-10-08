@@ -8,6 +8,7 @@ import com.ryankshah.questapi.api.QuestRegistry;
 import com.ryankshah.questapi.api.quest.FailTrigger;
 import com.ryankshah.questapi.api.quest.Quest;
 import com.ryankshah.questapi.api.quest.QuestCategory;
+import com.ryankshah.questapi.api.quest.QuestlineDefinition;
 import com.ryankshah.questapi.api.quest.condition.QuestCondition;
 import com.ryankshah.questapi.api.quest.condition.impl.QuestFailedCondition;
 import com.ryankshah.questapi.example.ExampleQuests;
@@ -34,8 +35,9 @@ import java.util.Set;
  * registering them in Java.
  * <p>
  * Files live at {@code data/<namespace>/questapi/categories/<path>.json} and
- * {@code data/<namespace>/questapi/quests/<path>.json}, using exactly the JSON shape produced by
- * {@link QuestCategory#CODEC} and {@link QuestCodecs#questCodec}. A quest's ID and category come
+ * {@code data/<namespace>/questapi/quests/<path>.json} and
+ * {@code data/<namespace>/questapi/questlines/<path>.json}, using exactly the JSON shape produced by
+ * {@link QuestCategory#CODEC}, {@link QuestCodecs#questCodec} and {@link QuestCodecs#questlineCodec}. A quest's ID and category come
  * from the JSON content itself, not the file path - the path is purely organisational, so datapack
  * authors are free to group files into folders however they like.
  * <p>
@@ -52,17 +54,20 @@ public final class QuestDataLoader extends SimplePreparableReloadListener<QuestD
 
     private static final FileToIdConverter CATEGORIES = FileToIdConverter.json("questapi/categories");
     private static final FileToIdConverter QUESTS = FileToIdConverter.json("questapi/quests");
+    private static final FileToIdConverter QUESTLINES = FileToIdConverter.json("questapi/questlines");
 
     private final Set<Identifier> previousCategories = new HashSet<>();
     private final Set<Identifier> previousQuests = new HashSet<>();
-    private volatile RawData pending = new RawData(Map.of(), Map.of());
+    private final Set<Identifier> previousQuestlines = new HashSet<>();
+    private volatile RawData pending = new RawData(Map.of(), Map.of(), Map.of());
 
-    public record RawData(Map<Identifier, JsonElement> categories, Map<Identifier, JsonElement> quests) {
+    public record RawData(Map<Identifier, JsonElement> categories, Map<Identifier, JsonElement> quests,
+                          Map<Identifier, JsonElement> questlines) {
     }
 
     @Override
     protected RawData prepare(ResourceManager manager, ProfilerFiller profiler) {
-        return new RawData(readRaw(manager, CATEGORIES), readRaw(manager, QUESTS));
+        return new RawData(readRaw(manager, CATEGORIES), readRaw(manager, QUESTS), readRaw(manager, QUESTLINES));
     }
 
     private static Map<Identifier, JsonElement> readRaw(ResourceManager manager, FileToIdConverter lister) {
@@ -104,6 +109,16 @@ public final class QuestDataLoader extends SimplePreparableReloadListener<QuestD
             previousCategories.add(category.id());
         }
 
+        Map<Identifier, QuestlineDefinition> questlines = decodeQuestlines(pending.questlines(), registry, devMode);
+        for (Identifier id : previousQuestlines) {
+            registry.removeQuestline(id);
+        }
+        previousQuestlines.clear();
+        for (QuestlineDefinition questline : questlines.values()) {
+            registry.registerQuestline(questline);
+            previousQuestlines.add(questline.id());
+        }
+
         Map<Identifier, Quest> quests = decodeQuests(pending.quests(), registry, devMode);
         for (Identifier id : previousQuests) {
             registry.removeQuest(id);
@@ -115,6 +130,7 @@ public final class QuestDataLoader extends SimplePreparableReloadListener<QuestD
         }
 
         validateFailureRules(quests.values(), registry);
+        validateQuestlines(quests.values(), registry);
 
         if (!categories.isEmpty() || !quests.isEmpty()) {
             QuestApi.LOG.info("Loaded {} quest categor{} and {} quest{} from datapacks",
@@ -150,6 +166,48 @@ public final class QuestDataLoader extends SimplePreparableReloadListener<QuestD
                 }
             }
         }
+    }
+
+    /**
+     * Logs a warning for a quest that names a questline that does not exist, and for a questline
+     * whose parent does not exist or whose parent chain loops back on itself.
+     */
+    private static void validateQuestlines(Collection<Quest> quests, QuestRegistry registry) {
+        for (Quest quest : quests) {
+            quest.questline().filter(id -> registry.getQuestline(id).isEmpty()).ifPresent(id ->
+                    QuestApi.LOG.warn("Quest '{}' is in questline '{}', which is not defined", quest.id(), id));
+        }
+        for (QuestlineDefinition questline : registry.questlines()) {
+            Set<Identifier> seen = new HashSet<>();
+            seen.add(questline.id());
+            Identifier parentId = questline.parent().orElse(null);
+            while (parentId != null) {
+                if (registry.getQuestline(parentId).isEmpty()) {
+                    QuestApi.LOG.warn("Questline '{}' has parent '{}', which is not defined", questline.id(), parentId);
+                    break;
+                }
+                if (!seen.add(parentId)) {
+                    QuestApi.LOG.warn("Questline '{}' has a parent chain that loops back on itself", questline.id());
+                    break;
+                }
+                parentId = registry.getQuestline(parentId).flatMap(QuestlineDefinition::parent).orElse(null);
+            }
+        }
+    }
+
+    private static Map<Identifier, QuestlineDefinition> decodeQuestlines(Map<Identifier, JsonElement> raw, QuestRegistry registry, boolean devMode) {
+        Codec<QuestlineDefinition> codec = QuestCodecs.questlineCodec(registry);
+        Map<Identifier, QuestlineDefinition> result = new HashMap<>();
+        for (Map.Entry<Identifier, JsonElement> entry : raw.entrySet()) {
+            Identifier file = entry.getKey();
+            if (!devMode && file.getNamespace().equals(ExampleQuests.MOD)) {
+                continue;
+            }
+            codec.parse(JsonOps.INSTANCE, entry.getValue())
+                    .ifSuccess(questline -> result.put(questline.id(), questline))
+                    .ifError(error -> QuestApi.LOG.error("Couldn't parse questline file '{}': {}", file, error));
+        }
+        return result;
     }
 
     private static Map<Identifier, QuestCategory> decodeCategories(Map<Identifier, JsonElement> raw, boolean devMode) {

@@ -10,6 +10,7 @@ import com.ryankshah.questapi.api.quest.Quest;
 import com.ryankshah.questapi.api.quest.QuestDisplay;
 import com.ryankshah.questapi.api.quest.QuestFailureRules;
 import com.ryankshah.questapi.api.quest.QuestLifecycle;
+import com.ryankshah.questapi.api.quest.QuestlineDefinition;
 import com.ryankshah.questapi.api.quest.QuestRepeat;
 import com.ryankshah.questapi.api.quest.QuestTimeLimit;
 import com.ryankshah.questapi.api.quest.QuestToastOverrides;
@@ -153,8 +154,9 @@ public final class QuestCodecs {
                 rewardCodec(registry).listOf().optionalFieldOf("rewards", List.of()).forGetter(Quest::rewards),
                 conditionCodec(registry).listOf().optionalFieldOf("prerequisites", List.of()).forGetter(Quest::prerequisites),
                 failureCodec(registry).optionalFieldOf("failure").forGetter(Quest::failure),
-                toastOverridesCodec().optionalFieldOf("toast_overrides").forGetter(Quest::toastOverrides)
-        ).apply(instance, (id, category, display, lifecycle, objectives, rewards, prerequisites, failure, toastOverrides) -> {
+                toastOverridesCodec().optionalFieldOf("toast_overrides").forGetter(Quest::toastOverrides),
+                Identifier.CODEC.optionalFieldOf("questline").forGetter(Quest::questline)
+        ).apply(instance, (id, category, display, lifecycle, objectives, rewards, prerequisites, failure, toastOverrides, questline) -> {
             Quest.Builder builder = Quest.builder(id)
                     .category(category)
                     .title(display.title())
@@ -169,7 +171,18 @@ public final class QuestCodecs {
             lifecycle.repeat().ifPresent(repeat -> builder.repeatable(repeat.resetMode(), repeat.amount()));
             failure.ifPresent(builder::failure);
             toastOverrides.ifPresent(builder::toastOverrides);
+            questline.ifPresent(builder::questline);
             return builder.build();
         }));
+    }
+
+    public static Codec<QuestlineDefinition> questlineCodec(QuestRegistry registry) {
+        return RecordCodecBuilder.create(instance -> instance.group(
+                Identifier.CODEC.fieldOf("id").forGetter(QuestlineDefinition::id),
+                Codec.STRING.optionalFieldOf("display_name", "").forGetter(QuestlineDefinition::displayName),
+                Identifier.CODEC.optionalFieldOf("parent").forGetter(QuestlineDefinition::parent),
+                conditionCodec(registry).listOf().optionalFieldOf("opens_when", List.of()).forGetter(QuestlineDefinition::opensWhen),
+                conditionCodec(registry).listOf().optionalFieldOf("closes_when", List.of()).forGetter(QuestlineDefinition::closesWhen)
+        ).apply(instance, QuestlineDefinition::new));
     }
 }

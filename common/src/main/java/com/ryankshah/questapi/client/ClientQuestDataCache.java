@@ -12,7 +12,9 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.level.Level;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalLong;
 
@@ -23,6 +25,9 @@ import java.util.OptionalLong;
  * <p>
  * A quest absent from the synced progress map is always displayed as {@code LOCKED}: the server only
  * omits an entry for quests whose prerequisites are not yet satisfied.
+ * <p>
+ * The cache only holds definitions of quests the player has progress in; the server sends the rest
+ * when they are accepted (see {@code QuestNetworking#sendProgress}).
  */
 public final class ClientQuestDataCache {
 
@@ -31,6 +36,7 @@ public final class ClientQuestDataCache {
     public static final ClientQuestDataCache INSTANCE = new ClientQuestDataCache();
 
     private List<QuestCategory> categories = List.of();
+    private final Map<Identifier, Quest> questsById = new LinkedHashMap<>();
     private List<Quest> quests = List.of();
     private ManualQuestActions manualActions = ManualQuestActions.ALL;
     private int ticksPerGameDay = DEFAULT_TICKS_PER_GAME_DAY;
@@ -51,12 +57,32 @@ public final class ClientQuestDataCache {
         return revision;
     }
 
+    /**
+     * Replaces everything the cache knows about definitions. The quests passed in are only the ones
+     * the player has progress in; later ones arrive through {@link #addQuests(List)}.
+     */
     public void setDefinitions(List<QuestCategory> categories, List<Quest> quests, ManualQuestActions manualActions, int ticksPerGameDay) {
         this.categories = categories;
-        this.quests = quests;
+        this.questsById.clear();
         this.manualActions = manualActions;
         this.ticksPerGameDay = ticksPerGameDay;
+        putQuests(quests);
         this.revision++;
+    }
+
+    /**
+     * Adds quest definitions the server sent after the initial sync, replacing any with the same id.
+     */
+    public void addQuests(List<Quest> added) {
+        putQuests(added);
+        this.revision++;
+    }
+
+    private void putQuests(List<Quest> added) {
+        for (Quest quest : added) {
+            questsById.put(quest.id(), quest);
+        }
+        this.quests = List.copyOf(questsById.values());
     }
 
     /**
@@ -75,6 +101,7 @@ public final class ClientQuestDataCache {
 
     public void clear() {
         this.categories = List.of();
+        this.questsById.clear();
         this.quests = List.of();
         this.manualActions = ManualQuestActions.ALL;
         this.ticksPerGameDay = DEFAULT_TICKS_PER_GAME_DAY;
@@ -136,7 +163,7 @@ public final class ClientQuestDataCache {
     }
 
     public Optional<Quest> getQuest(Identifier id) {
-        return quests.stream().filter(q -> q.id().equals(id)).findFirst();
+        return Optional.ofNullable(questsById.get(id));
     }
 
     public QuestState getState(Identifier questId) {

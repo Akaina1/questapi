@@ -51,6 +51,7 @@
   "questapi.gui.state.rewarded": "Complete",
   "questapi.gui.state.abandoned": "Abandoned",
   "questapi.gui.state.failed": "Failed",
+  "questapi.gui.state.permanently_locked": "Closed",
   "questapi.gui.tab.ongoing": "Ongoing",
   "questapi.gui.tab.completed": "Completed",
   "questapi.gui.tab.failed": "Failed",

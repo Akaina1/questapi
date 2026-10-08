@@ -26,6 +26,7 @@ public final class QuestGuiText {
                     : Component.translatable("questapi.gui.state.rewarded");
             case ABANDONED -> Component.translatable("questapi.gui.state.abandoned");
             case FAILED -> Component.translatable("questapi.gui.state.failed");
+            case PERMANENTLY_LOCKED -> Component.translatable("questapi.gui.state.permanently_locked");
         };
     }
 
@@ -77,7 +78,7 @@ public final class QuestGuiText {
      */
     public static int stateColor(QuestState state) {
         return switch (state) {
-            case LOCKED, ABANDONED -> 0xFF808080;
+            case LOCKED, ABANDONED, PERMANENTLY_LOCKED -> 0xFF808080;
             case AVAILABLE -> 0xFFFFFFFF;
             case ACTIVE -> 0xFFFFD83C;
             case COMPLETED -> 0xFFFFAA00;

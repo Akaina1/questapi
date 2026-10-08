@@ -5,10 +5,13 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.ryankshah.questapi.api.quest.QuestContext;
 import com.ryankshah.questapi.api.quest.condition.ConditionType;
 import com.ryankshah.questapi.api.quest.condition.QuestCondition;
+import com.ryankshah.questapi.api.quest.condition.TriggerKeys;
 import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.advancements.AdvancementProgress;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
+
+import java.util.List;
 
 /**
  * Requires the player to have completed a specific vanilla or datapack advancement.
@@ -47,6 +50,11 @@ public final class AdvancementCondition implements QuestCondition {
         }
         AdvancementProgress progress = context.player().getAdvancements().getOrStartProgress(advancement);
         return progress.isDone();
+    }
+
+    @Override
+    public List<Identifier> triggers() {
+        return List.of(TriggerKeys.ADVANCEMENT);
     }
 
     public Identifier advancementId() {

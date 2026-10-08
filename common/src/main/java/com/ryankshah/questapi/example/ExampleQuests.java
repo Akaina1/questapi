@@ -232,8 +232,9 @@ public final class ExampleQuests {
                 .build());
 
         // Thunderstruck: only becomes available during a thunderstorm - demonstrates WeatherCondition
-        // and EffectReward. Availability is polled every tick (see QuestManagerImpl#tickObjectives),
-        // so this unlocks the moment a storm actually starts rather than only at the next login.
+        // and EffectReward. The weather condition fires a trigger when the weather changes (see
+        // QuestManagerImpl#tickObjectives), so this unlocks the moment a storm actually starts
+        // rather than only at the next login.
         registry.registerQuest(Quest.builder(thunderstruck)
                 .title(Component.literal("Thunderstruck"))
                 .description(Component.literal("Collect gunpowder while the storm rages."))

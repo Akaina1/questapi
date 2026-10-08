@@ -9,6 +9,7 @@ import com.ryankshah.questapi.api.quest.condition.QuestCondition;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -63,6 +64,29 @@ public final class AnyOfCondition implements QuestCondition {
     public boolean test(QuestContext context) {
         for (QuestCondition condition : conditions) {
             if (condition.test(context)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @Override
+    public List<Identifier> triggers() {
+        List<Identifier> keys = new ArrayList<>();
+        for (QuestCondition condition : conditions) {
+            for (Identifier key : condition.triggers()) {
+                if (!keys.contains(key)) {
+                    keys.add(key);
+                }
+            }
+        }
+        return keys;
+    }
+
+    @Override
+    public boolean live() {
+        for (QuestCondition condition : conditions) {
+            if (condition.live()) {
                 return true;
             }
         }

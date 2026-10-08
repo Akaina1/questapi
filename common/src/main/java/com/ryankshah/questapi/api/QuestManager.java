@@ -33,20 +33,38 @@ public interface QuestManager {
     PlayerQuestData dataFor(ServerPlayer player);
 
     /**
-     * Returns the current lifecycle state of a quest for a player. Quests the player has never
-     * interacted with report {@link QuestState#LOCKED} or {@link QuestState#AVAILABLE} depending on
-     * whether their prerequisites currently pass, without materialising a stored progress entry.
+     * Returns the current lifecycle state of a quest for a player. Quests the player has started
+     * report their stored state. Every other quest reports {@link QuestState#PERMANENTLY_LOCKED} if
+     * its questline is closed, otherwise {@link QuestState#AVAILABLE} or {@link QuestState#LOCKED}
+     * depending on whether its prerequisites pass right now. Those three are computed on each call
+     * and never stored, so they can never be out of date.
      */
     QuestState getState(ServerPlayer player, Identifier questId);
 
     QuestProgress getProgress(ServerPlayer player, Identifier questId);
 
     /**
-     * Recomputes LOCKED/AVAILABLE state for every registered quest against this player's current
-     * progress, auto-activating any quest marked {@code autoActivate} whose prerequisites now pass.
-     * Call after login and after any quest completion.
+     * Evaluates every registered quest once: fires the first-time unlock notification and
+     * auto-activates quests marked {@code autoActivate} whose prerequisites now pass, and migrates
+     * saved data from versions that stored LOCKED/AVAILABLE entries. This is a full pass over all
+     * quests, so call it only at login; use {@link #notifyTrigger} when one specific thing changed.
      */
     void refreshAvailability(ServerPlayer player);
+
+    /**
+     * Reports that something a condition may depend on changed for this player (a flag, a quest
+     * state, the inventory, the time of day, ...). Only quests that list {@code trigger} through
+     * {@code QuestCondition#triggers()} are re-evaluated, and questlines closed by it fail their
+     * started quests.
+     *
+     * @see com.ryankshah.questapi.api.quest.condition.TriggerKeys
+     */
+    void notifyTrigger(ServerPlayer player, Identifier trigger);
+
+    /**
+     * Whether {@code questlineId}, or any questline it is nested in, is closed for this player.
+     */
+    boolean isQuestlineClosed(ServerPlayer player, Identifier questlineId);
 
     /**
      * Manually starts an {@code AVAILABLE} quest, transitioning it to {@code ACTIVE} and capturing
@@ -56,8 +74,8 @@ public interface QuestManager {
     boolean startQuest(ServerPlayer player, Identifier questId);
 
     /**
-     * Abandons an {@code ACTIVE} quest, discarding its progress and returning it to
-     * {@code AVAILABLE}/{@code LOCKED}. No-op if the quest is not active.
+     * Abandons an {@code ACTIVE} quest, discarding its progress and returning it to its computed
+     * {@code AVAILABLE}/{@code LOCKED} state. No-op if the quest is not active.
      */
     boolean abandonQuest(ServerPlayer player, Identifier questId);
 
@@ -103,8 +121,11 @@ public interface QuestManager {
     boolean deliverItems(ServerPlayer player, Identifier questId, int objectiveIndex, int amount);
 
     /**
-     * Re-evaluates every poll-based objective of every {@code ACTIVE} quest for this player. Called
-     * roughly once per second by each loader's server tick hook.
+     * Called every server tick by each loader's tick hook. Per tick it only does work that depends
+     * on the player's started quests with a time limit, plus a few constant-time checks that fire
+     * triggers (block position, inventory contents, experience level, and the overworld's time of
+     * day and weather). Poll-based objectives and repeatable-quest resets are re-evaluated once per
+     * second, staggered per player. Availability of unstarted quests is never polled.
      */
     void tickObjectives(ServerPlayer player);
 

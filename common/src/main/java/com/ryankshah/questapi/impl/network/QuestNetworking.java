@@ -21,8 +21,14 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 import java.util.function.Function;
 
 /**
@@ -34,14 +40,63 @@ public final class QuestNetworking {
     private QuestNetworking() {
     }
 
+    /**
+     * How many quest definitions go into one packet. A clientbound custom payload is limited to about
+     * 1 MiB and a definition is roughly 0.5 to 1 KB, so this keeps each packet far below the limit.
+     */
+    public static final int DEFINITIONS_PER_PACKET = 200;
+
+    /**
+     * Per player, the quest definitions the client has already been sent. Only touched on the server
+     * thread, and reset by {@link #sendDefinitions(ServerPlayer)}.
+     */
+    private static final Map<UUID, Set<Identifier>> SENT_DEFINITIONS = new HashMap<>();
+
+    /**
+     * Sends the categories and settings and tells the client to forget every quest definition. The
+     * definitions of the player's own quests follow with the next {@link #sendProgress}.
+     */
     public static void sendDefinitions(ServerPlayer player) {
+        SENT_DEFINITIONS.remove(player.getUUID());
         Services.NETWORK.sendToPlayer(player, new ClientboundSyncDefinitionsPayload(
                 List.copyOf(QuestApi.registry().categories()),
-                List.copyOf(QuestApi.registry().quests()),
-                new ManualQuestActions(DevConfig.allowManualStart(), DevConfig.allowManualAbandon(),
-                        DevConfig.allowManualClaim(), DevConfig.allowManualDeliver()),
-                DevConfig.ticksPerGameDay()
+                List.of(),
+                manualActions(),
+                DevConfig.ticksPerGameDay(),
+                true
         ));
+    }
+
+    private static ManualQuestActions manualActions() {
+        return new ManualQuestActions(DevConfig.allowManualStart(), DevConfig.allowManualAbandon(),
+                DevConfig.allowManualClaim(), DevConfig.allowManualDeliver());
+    }
+
+    /**
+     * Sends the definition of every quest the player has progress in and the client does not have
+     * yet, in packets of {@link #DEFINITIONS_PER_PACKET}. Quests the player has not started are never
+     * sent, so the packet size depends on the quest log and not on how many quests exist.
+     */
+    private static void sendMissingDefinitions(ServerPlayer player, PlayerQuestData data) {
+        Set<Identifier> sent = SENT_DEFINITIONS.computeIfAbsent(player.getUUID(), id -> new HashSet<>());
+        List<Quest> missing = new ArrayList<>();
+        for (Identifier questId : data.progress().keySet()) {
+            if (sent.contains(questId)) {
+                continue;
+            }
+            Optional<Quest> quest = QuestApi.registry().getQuest(questId);
+            if (quest.isPresent()) {
+                missing.add(quest.get());
+            }
+        }
+        for (int from = 0; from < missing.size(); from += DEFINITIONS_PER_PACKET) {
+            List<Quest> batch = List.copyOf(missing.subList(from, Math.min(from + DEFINITIONS_PER_PACKET, missing.size())));
+            Services.NETWORK.sendToPlayer(player, new ClientboundSyncDefinitionsPayload(
+                    List.of(), batch, manualActions(), DevConfig.ticksPerGameDay(), false));
+            for (Quest quest : batch) {
+                sent.add(quest.id());
+            }
+        }
     }
 
     public static void sendProgress(ServerPlayer player) {
@@ -51,6 +106,7 @@ public final class QuestNetworking {
         // -encode. A snapshot copy is cheap and makes that impossible.
         PlayerQuestData data = QuestApi.manager().dataFor(player);
         data.pruneTracked();
+        sendMissingDefinitions(player, data);
         Services.NETWORK.sendToPlayer(player, new ClientboundSyncProgressPayload(data.copy()));
     }
 

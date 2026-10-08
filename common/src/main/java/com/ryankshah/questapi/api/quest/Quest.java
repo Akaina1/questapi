@@ -27,10 +27,12 @@ public final class Quest {
     private final List<QuestCondition> prerequisites;
     private final Optional<QuestFailureRules> failure;
     private final Optional<QuestToastOverrides> toastOverrides;
+    private final Optional<Identifier> questline;
 
     private Quest(Builder builder) {
         this.id = builder.id;
         this.categoryId = builder.categoryId;
+        this.questline = Optional.ofNullable(builder.questline);
         this.display = new QuestDisplay(builder.title, builder.description, builder.icon, builder.sortOrder);
         this.lifecycle = new QuestLifecycle(builder.autoActivate, builder.sequential,
                 builder.repeatable ? Optional.of(new QuestRepeat(builder.resetMode, builder.resetAmount)) : Optional.empty());
@@ -91,6 +93,14 @@ public final class Quest {
 
     public Identifier categoryId() {
         return categoryId;
+    }
+
+    /**
+     * The questline this quest belongs to, if any. A quest in a closed questline can never be
+     * started; see {@code QuestlineDefinition}.
+     */
+    public Optional<Identifier> questline() {
+        return questline;
     }
 
     public List<ObjectiveDefinition> objectives() {
@@ -188,9 +198,18 @@ public final class Quest {
         private boolean sequential = false;
         private QuestFailureRules failure = null;
         private QuestToastOverrides toastOverrides = null;
+        private Identifier questline = null;
 
         private Builder(Identifier id) {
             this.id = id;
+        }
+
+        /**
+         * Places this quest in a questline, which can lock it permanently when the questline closes.
+         */
+        public Builder questline(Identifier questline) {
+            this.questline = questline;
+            return this;
         }
 
         public Builder title(Component title) {

@@ -6,11 +6,14 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.ryankshah.questapi.api.quest.QuestContext;
 import com.ryankshah.questapi.api.quest.condition.ConditionType;
 import com.ryankshah.questapi.api.quest.condition.QuestCondition;
+import com.ryankshah.questapi.api.quest.condition.TriggerKeys;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+
+import java.util.List;
 
 /**
  * Requires the player to currently possess at least {@code amount} of a given item, e.g. a quest
@@ -48,5 +51,15 @@ public final class ItemPossessionCondition implements QuestCondition {
     @Override
     public boolean test(QuestContext context) {
         return context.player().getInventory().countItem(item) >= amount;
+    }
+
+    @Override
+    public List<Identifier> triggers() {
+        return List.of(TriggerKeys.INVENTORY);
+    }
+
+    @Override
+    public boolean live() {
+        return true;
     }
 }

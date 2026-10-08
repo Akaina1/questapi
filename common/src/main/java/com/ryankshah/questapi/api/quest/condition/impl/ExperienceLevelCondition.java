@@ -6,8 +6,11 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.ryankshah.questapi.api.quest.QuestContext;
 import com.ryankshah.questapi.api.quest.condition.ConditionType;
 import com.ryankshah.questapi.api.quest.condition.QuestCondition;
+import com.ryankshah.questapi.api.quest.condition.TriggerKeys;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
+
+import java.util.List;
 
 /**
  * Requires the player to be at least a given experience level.
@@ -41,6 +44,16 @@ public final class ExperienceLevelCondition implements QuestCondition {
     @Override
     public boolean test(QuestContext context) {
         return context.player().experienceLevel >= level;
+    }
+
+    @Override
+    public List<Identifier> triggers() {
+        return List.of(TriggerKeys.EXPERIENCE_LEVEL);
+    }
+
+    @Override
+    public boolean live() {
+        return true;
     }
 
     public int level() {

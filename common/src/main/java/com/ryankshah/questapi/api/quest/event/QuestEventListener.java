@@ -54,4 +54,13 @@ public interface QuestEventListener {
 
     default void onQuestReset(ServerPlayer player, Quest quest) {
     }
+
+    /**
+     * Fired when a player's block position differs from the last time it was checked. Fires at most
+     * once per tick per player and never while they stand still, so a listener that reacts to
+     * movement (entering a biome or area) only does work while the player is actually moving. Keep
+     * implementations cheap.
+     */
+    default void onPlayerMoved(ServerPlayer player) {
+    }
 }

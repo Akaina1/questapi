@@ -10,9 +10,11 @@ import com.ryankshah.questapi.api.quest.QuestFailureRules;
 import com.ryankshah.questapi.api.quest.QuestProgress;
 import com.ryankshah.questapi.api.quest.QuestState;
 import com.ryankshah.questapi.api.quest.QuestTimeLimit;
+import com.ryankshah.questapi.api.quest.QuestlineDefinition;
 import com.ryankshah.questapi.api.quest.ResetMode;
 import com.ryankshah.questapi.api.quest.TimeLimitUnit;
 import com.ryankshah.questapi.api.quest.condition.QuestCondition;
+import com.ryankshah.questapi.api.quest.condition.TriggerKeys;
 import com.ryankshah.questapi.api.quest.event.QuestEventListener;
 import com.ryankshah.questapi.api.quest.event.QuestEvents;
 import com.ryankshah.questapi.api.quest.objective.ObjectiveDefinition;
@@ -29,7 +31,9 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -55,10 +59,47 @@ public final class QuestManagerImpl implements QuestManager {
      */
     private static final long MAX_SAMPLE_AGE_TICKS = 2L;
 
+    /**
+     * How a questline stands for one player: open for quests to be started, not opened yet, or
+     * closed for good.
+     */
+    private enum QuestlineStatus {
+        OPEN, NOT_YET, CLOSED
+    }
+
+    /**
+     * The per-player lists and last-seen values that keep the per-tick work independent of how many
+     * quests exist. The id lists are rebuilt from the saved progress (which only holds started
+     * quests) whenever a quest changes state, and once per second as a safety net, and are replaced
+     * rather than modified so a caller iterating one is never disturbed.
+     */
+    private static final class PlayerRuntime {
+        boolean dirty = true;
+        List<Identifier> active = List.of();
+        List<Identifier> timed = List.of();
+        List<Identifier> repeatable = List.of();
+        long lastBlockPos = Long.MIN_VALUE;
+        boolean inventorySampled;
+        int inventorySignature;
+        int experienceLevel = -1;
+    }
+
+    /** How often (in ticks) poll-based objectives and repeatable resets are re-evaluated. */
+    private static final int SLOW_TICK_INTERVAL = 20;
+    /** How often (in ticks) the inventory is compared, and only while an item condition exists. */
+    private static final int INVENTORY_SAMPLE_INTERVAL = 10;
+    /** Deepest questline nesting followed; also stops a parent cycle from looping forever. */
+    private static final int MAX_QUESTLINE_DEPTH = 8;
+
     private final QuestRegistry registry;
     private final Map<TimerKey, ClockSample> clockSamples = new HashMap<>();
+    private final Map<UUID, PlayerRuntime> runtimes = new HashMap<>();
     private MinecraftServer server;
     private QuestSavedData savedData;
+    private long lastWorldCheckTick = -1L;
+    private boolean worldSampled;
+    private boolean lastBright;
+    private int lastWeather;
 
     public QuestManagerImpl(QuestRegistry registry) {
         this.registry = registry;
@@ -75,6 +116,9 @@ public final class QuestManagerImpl implements QuestManager {
         this.server = null;
         this.savedData = null;
         this.clockSamples.clear();
+        this.runtimes.clear();
+        this.lastWorldCheckTick = -1L;
+        this.worldSampled = false;
     }
 
     @Override
@@ -89,10 +133,10 @@ public final class QuestManagerImpl implements QuestManager {
             return QuestState.LOCKED;
         }
         QuestProgress progress = dataFor(player).get(questId);
-        if (progress != null) {
+        if (progress != null && progress.state().stored()) {
             return progress.state();
         }
-        return passesPrerequisites(player, quest) ? QuestState.AVAILABLE : QuestState.LOCKED;
+        return computedState(player, quest);
     }
 
     @Override
@@ -101,13 +145,79 @@ public final class QuestManagerImpl implements QuestManager {
         return progress != null ? progress : QuestProgress.locked();
     }
 
-    private boolean passesPrerequisites(ServerPlayer player, Quest quest) {
-        if (quest.prerequisites().isEmpty()) {
+    /**
+     * The state of a quest the player has not started, worked out from their current conditions.
+     * Nothing is saved, so the answer can never be stale.
+     */
+    private QuestState computedState(ServerPlayer player, Quest quest) {
+        QuestContext ctx = new QuestContext(player, this);
+        if (quest.questline().isPresent()) {
+            switch (questlineStatus(ctx, quest.questline().get())) {
+                case CLOSED -> {
+                    return QuestState.PERMANENTLY_LOCKED;
+                }
+                case NOT_YET -> {
+                    return QuestState.LOCKED;
+                }
+                default -> {
+                }
+            }
+        }
+        return passesPrerequisites(ctx, quest) ? QuestState.AVAILABLE : QuestState.LOCKED;
+    }
+
+    /**
+     * Checks a questline and then the ones it is nested in. A closed one wins over everything,
+     * because a closed parent closes all of its children.
+     */
+    private QuestlineStatus questlineStatus(QuestContext ctx, Identifier questlineId) {
+        boolean opened = true;
+        Identifier id = questlineId;
+        for (int depth = 0; id != null && depth < MAX_QUESTLINE_DEPTH; depth++) {
+            QuestlineDefinition line = registry.getQuestline(id).orElse(null);
+            if (line == null) {
+                break;
+            }
+            for (QuestCondition condition : line.closesWhen()) {
+                if (condition.test(ctx)) {
+                    return QuestlineStatus.CLOSED;
+                }
+            }
+            if (opened) {
+                for (QuestCondition condition : line.opensWhen()) {
+                    if (!condition.test(ctx)) {
+                        opened = false;
+                        break;
+                    }
+                }
+            }
+            id = line.parent().orElse(null);
+        }
+        return opened ? QuestlineStatus.OPEN : QuestlineStatus.NOT_YET;
+    }
+
+    @Override
+    public boolean isQuestlineClosed(ServerPlayer player, Identifier questlineId) {
+        return questlineStatus(new QuestContext(player, this), questlineId) == QuestlineStatus.CLOSED;
+    }
+
+    /**
+     * Whether every prerequisite passes. Conditions that only read stored history (flags, quest
+     * states) run first, so a quest whose flags are not met never reaches the live checks of the
+     * world, the position or the inventory.
+     */
+    private boolean passesPrerequisites(QuestContext ctx, Quest quest) {
+        List<QuestCondition> prerequisites = quest.prerequisites();
+        if (prerequisites.isEmpty()) {
             return true;
         }
-        QuestContext ctx = new QuestContext(player, this);
-        for (QuestCondition condition : quest.prerequisites()) {
-            if (!condition.test(ctx)) {
+        for (QuestCondition condition : prerequisites) {
+            if (!condition.live() && !condition.test(ctx)) {
+                return false;
+            }
+        }
+        for (QuestCondition condition : prerequisites) {
+            if (condition.live() && !condition.test(ctx)) {
                 return false;
             }
         }
@@ -116,35 +226,149 @@ public final class QuestManagerImpl implements QuestManager {
 
     @Override
     public void refreshAvailability(ServerPlayer player) {
-        PlayerQuestData data = dataFor(player);
+        runtimes.remove(player.getUUID());
+        migrateStoredAvailability(dataFor(player));
+        evaluateQuests(player, registry.quests());
+    }
+
+    /**
+     * Older saves stored LOCKED, AVAILABLE and ABANDONED entries for every quest. Those states are
+     * computed now, so the entries are dropped, remembering which quests the player had already been
+     * told about so they are not announced a second time.
+     */
+    private void migrateStoredAvailability(PlayerQuestData data) {
         boolean changed = false;
-        for (Quest quest : registry.quests()) {
-            QuestProgress progress = data.get(quest.id());
-            if (progress != null && progress.state() != QuestState.LOCKED && progress.state() != QuestState.ABANDONED) {
+        Iterator<Map.Entry<Identifier, QuestProgress>> entries = data.progress().entrySet().iterator();
+        while (entries.hasNext()) {
+            Map.Entry<Identifier, QuestProgress> entry = entries.next();
+            QuestState state = entry.getValue().state();
+            if (state.stored()) {
                 continue;
             }
-            boolean unlocked = passesPrerequisites(player, quest);
-            if (!unlocked) {
-                if (progress == null) {
-                    continue;
-                }
-                progress.setState(QuestState.LOCKED);
-                changed = true;
-                continue;
+            if (state == QuestState.AVAILABLE || state == QuestState.ABANDONED) {
+                data.markUnlockSeen(entry.getKey());
             }
-            if (quest.autoActivate()) {
-                activateQuest(player, quest, data.getOrCreate(quest.id()));
-            } else {
-                data.getOrCreate(quest.id()).setState(QuestState.AVAILABLE);
-            }
+            entries.remove();
             changed = true;
-            for (QuestEventListener listener : QuestEvents.listeners()) {
-                listener.onQuestUnlocked(player, quest);
-            }
         }
         if (changed) {
             markDirty();
         }
+    }
+
+    @Override
+    public void notifyTrigger(ServerPlayer player, Identifier trigger) {
+        if (savedData == null) {
+            return;
+        }
+        List<Quest> quests = registry.questsForTrigger(trigger);
+        if (!quests.isEmpty()) {
+            evaluateQuests(player, quests);
+        }
+        List<QuestlineDefinition> closing = registry.questlinesClosedBy(trigger);
+        if (closing.isEmpty()) {
+            return;
+        }
+        for (QuestlineDefinition line : closing) {
+            if (isQuestlineClosed(player, line.id())) {
+                failStartedQuestsIn(player, line.id());
+            }
+        }
+    }
+
+    /**
+     * Fails every started quest in a closed questline, including quests in questlines nested inside
+     * it. Retryable quests are reset by the failure and then read as permanently locked.
+     */
+    private void failStartedQuestsIn(ServerPlayer player, Identifier questlineId) {
+        PlayerQuestData data = dataFor(player);
+        for (Quest quest : new ArrayList<>(registry.questsInQuestline(questlineId))) {
+            QuestProgress progress = data.get(quest.id());
+            if (progress != null && progress.state() == QuestState.ACTIVE) {
+                failQuest(player, quest.id());
+            }
+        }
+    }
+
+    /**
+     * Re-checks only the given quests: announces the first unlock of each one that is now available
+     * and starts those marked {@code autoActivate}. A quest the player already started is skipped.
+     * The announcement is remembered, so a quest that becomes available and unavailable again (a
+     * night-only quest, say) is only announced once.
+     */
+    private void evaluateQuests(ServerPlayer player, Collection<Quest> quests) {
+        PlayerQuestData data = dataFor(player);
+        for (Quest quest : quests) {
+            QuestProgress progress = data.get(quest.id());
+            if (progress != null && progress.state().stored()) {
+                continue;
+            }
+            if (computedState(player, quest) != QuestState.AVAILABLE) {
+                continue;
+            }
+            boolean firstUnlock = data.markUnlockSeen(quest.id());
+            if (quest.autoActivate()) {
+                activateQuest(player, quest, data.getOrCreate(quest.id()));
+            }
+            if (firstUnlock) {
+                for (QuestEventListener listener : QuestEvents.listeners()) {
+                    listener.onQuestUnlocked(player, quest);
+                }
+            }
+            if (firstUnlock || quest.autoActivate()) {
+                markDirty();
+            }
+        }
+    }
+
+    private void notifyQuestChanged(ServerPlayer player, Quest quest) {
+        notifyTrigger(player, TriggerKeys.quest(quest.id()));
+    }
+
+    private PlayerRuntime runtimeFor(ServerPlayer player) {
+        return runtimes.computeIfAbsent(player.getUUID(), id -> new PlayerRuntime());
+    }
+
+    private void invalidateRuntime(ServerPlayer player) {
+        runtimeFor(player).dirty = true;
+    }
+
+    /**
+     * The runtime lists for a player, rebuilt first if a quest changed state since they were built.
+     * Only started quests exist in the saved progress, so the rebuild cost follows what the player
+     * has touched and not the size of the quest list.
+     */
+    private PlayerRuntime currentRuntime(ServerPlayer player) {
+        PlayerRuntime runtime = runtimeFor(player);
+        if (!runtime.dirty) {
+            return runtime;
+        }
+        List<Identifier> active = new ArrayList<>();
+        List<Identifier> timed = new ArrayList<>();
+        List<Identifier> repeatable = new ArrayList<>();
+        for (Map.Entry<Identifier, QuestProgress> entry : dataFor(player).progress().entrySet()) {
+            QuestState state = entry.getValue().state();
+            if (state != QuestState.ACTIVE && state != QuestState.REWARDED) {
+                continue;
+            }
+            Quest quest = registry.getQuest(entry.getKey()).orElse(null);
+            if (quest == null) {
+                continue;
+            }
+            if (state == QuestState.ACTIVE) {
+                active.add(entry.getKey());
+                if (quest.failure().flatMap(QuestFailureRules::timeLimit).isPresent()) {
+                    timed.add(entry.getKey());
+                }
+            } else if (quest.repeatable()) {
+                repeatable.add(entry.getKey());
+            }
+        }
+        runtime.active = active;
+        runtime.timed = timed;
+        runtime.repeatable = repeatable;
+        runtime.dirty = false;
+        return runtime;
     }
 
     private void activateQuest(ServerPlayer player, Quest quest, QuestProgress progress) {
@@ -162,6 +386,7 @@ public final class QuestManagerImpl implements QuestManager {
         if (DevConfig.autoTrackStartedQuests()) {
             dataFor(player).trackIfRoom(quest.id());
         }
+        invalidateRuntime(player);
         for (QuestEventListener listener : QuestEvents.listeners()) {
             listener.onQuestStarted(player, quest);
         }
@@ -186,16 +411,19 @@ public final class QuestManagerImpl implements QuestManager {
         if (progress == null || progress.state() != QuestState.ACTIVE) {
             return false;
         }
-        progress.objectives().clear();
-        progress.setState(QuestState.ABANDONED);
-        progress.setStartedAt(0);
+        data.progress().remove(questId);
+        clockSamples.remove(new TimerKey(player.getUUID(), questId));
         markDirty();
-        refreshAvailability(player);
-        registry.getQuest(questId).ifPresent(quest -> {
-            for (QuestEventListener listener : QuestEvents.listeners()) {
-                listener.onQuestReset(player, quest);
-            }
-        });
+        invalidateRuntime(player);
+        Quest quest = registry.getQuest(questId).orElse(null);
+        if (quest == null) {
+            return true;
+        }
+        evaluateQuests(player, List.of(quest));
+        for (QuestEventListener listener : QuestEvents.listeners()) {
+            listener.onQuestReset(player, quest);
+        }
+        notifyQuestChanged(player, quest);
         return true;
     }
 
@@ -220,13 +448,14 @@ public final class QuestManagerImpl implements QuestManager {
         progress.setState(QuestState.FAILED);
         clockSamples.remove(new TimerKey(player.getUUID(), questId));
         markDirty();
+        invalidateRuntime(player);
         for (QuestEventListener listener : QuestEvents.listeners()) {
             listener.onQuestFailed(player, quest);
         }
         if (quest.retryable()) {
             resetQuest(player, questId);
         } else {
-            refreshAvailability(player);
+            notifyQuestChanged(player, quest);
         }
         return true;
     }
@@ -263,30 +492,30 @@ public final class QuestManagerImpl implements QuestManager {
      * Adds the time this player has spent on each active timed quest and fails any quest whose
      * limit has run out.
      */
-    private void checkTimeLimits(ServerPlayer player) {
-        if (server == null) {
+    private void checkTimeLimits(ServerPlayer player, PlayerRuntime runtime) {
+        if (server == null || runtime.timed.isEmpty()) {
             return;
         }
         PlayerQuestData data = dataFor(player);
         List<Identifier> expired = new ArrayList<>();
         boolean changed = false;
-        for (Map.Entry<Identifier, QuestProgress> entry : data.progress().entrySet()) {
-            QuestProgress progress = entry.getValue();
-            if (progress.state() != QuestState.ACTIVE) {
+        for (Identifier questId : runtime.timed) {
+            QuestProgress progress = data.get(questId);
+            if (progress == null || progress.state() != QuestState.ACTIVE) {
                 continue;
             }
-            Quest quest = registry.getQuest(entry.getKey()).orElse(null);
+            Quest quest = registry.getQuest(questId).orElse(null);
             QuestTimeLimit limit = quest == null ? null : quest.failure().flatMap(QuestFailureRules::timeLimit).orElse(null);
             if (limit == null) {
                 continue;
             }
-            long elapsed = progress.elapsedTicks() + elapsedSinceLastTick(player, entry.getKey(), limit.unit());
+            long elapsed = progress.elapsedTicks() + elapsedSinceLastTick(player, questId, limit.unit());
             if (elapsed != progress.elapsedTicks()) {
                 progress.setElapsedTicks(elapsed);
                 changed = true;
             }
             if (elapsed >= limit.unit().toTicks(limit.amount(), DevConfig.ticksPerGameDay())) {
-                expired.add(entry.getKey());
+                expired.add(questId);
             }
         }
         if (changed) {
@@ -320,13 +549,18 @@ public final class QuestManagerImpl implements QuestManager {
     public void resetQuest(ServerPlayer player, Identifier questId) {
         PlayerQuestData data = dataFor(player);
         data.progress().remove(questId);
+        clockSamples.remove(new TimerKey(player.getUUID(), questId));
         markDirty();
-        refreshAvailability(player);
-        registry.getQuest(questId).ifPresent(quest -> {
-            for (QuestEventListener listener : QuestEvents.listeners()) {
-                listener.onQuestReset(player, quest);
-            }
-        });
+        invalidateRuntime(player);
+        Quest quest = registry.getQuest(questId).orElse(null);
+        if (quest == null) {
+            return;
+        }
+        evaluateQuests(player, List.of(quest));
+        for (QuestEventListener listener : QuestEvents.listeners()) {
+            listener.onQuestReset(player, quest);
+        }
+        notifyQuestChanged(player, quest);
     }
 
     @Override
@@ -351,10 +585,11 @@ public final class QuestManagerImpl implements QuestManager {
         progress.setRewardedAt(System.currentTimeMillis());
         progress.setRewardedAtDay(currentGameDay());
         markDirty();
+        invalidateRuntime(player);
         for (QuestEventListener listener : QuestEvents.listeners()) {
             listener.onRewardClaimed(player, quest);
         }
-        refreshAvailability(player);
+        notifyQuestChanged(player, quest);
         return true;
     }
 
@@ -431,13 +666,120 @@ public final class QuestManagerImpl implements QuestManager {
 
     @Override
     public void tickObjectives(ServerPlayer player) {
-        // World-state conditions (time of day, weather, biome) can flip from false to true without
-        // any discrete quest event to hang a recheck off of, unlike every other built-in condition -
-        // so availability needs to be polled here too, not just at login/claim/reset/abandon.
-        refreshAvailability(player);
-        checkRepeatableResets(player);
-        checkTimeLimits(player);
-        applyEvent(player, ObjectiveEventKeys.TICK, 0);
+        if (server == null || savedData == null) {
+            return;
+        }
+        long tick = server.getTickCount();
+        sampleWorldTriggers(tick);
+        PlayerRuntime runtime = runtimeFor(player);
+        sampleMovement(player, runtime);
+        sampleExperience(player, runtime);
+        sampleInventory(player, runtime, tick);
+
+        boolean slowTick = (tick + player.getId()) % SLOW_TICK_INTERVAL == 0;
+        if (slowTick) {
+            runtime.dirty = true;
+        }
+        runtime = currentRuntime(player);
+        checkTimeLimits(player, runtime);
+        if (slowTick) {
+            checkRepeatableResets(player, runtime);
+            applyEvent(player, ObjectiveEventKeys.TICK, 0);
+        }
+    }
+
+    /**
+     * Fires {@link TriggerKeys#POSITION} when the player's block position changed since the last
+     * tick. A single long comparison, and nothing at all while the player stands still.
+     */
+    private void sampleMovement(ServerPlayer player, PlayerRuntime runtime) {
+        long packed = player.blockPosition().asLong();
+        if (packed == runtime.lastBlockPos) {
+            return;
+        }
+        boolean firstSample = runtime.lastBlockPos == Long.MIN_VALUE;
+        runtime.lastBlockPos = packed;
+        if (firstSample) {
+            return;
+        }
+        notifyTrigger(player, TriggerKeys.POSITION);
+        for (QuestEventListener listener : QuestEvents.listeners()) {
+            listener.onPlayerMoved(player);
+        }
+    }
+
+    private void sampleExperience(ServerPlayer player, PlayerRuntime runtime) {
+        int level = player.experienceLevel;
+        if (level == runtime.experienceLevel) {
+            return;
+        }
+        boolean firstSample = runtime.experienceLevel < 0;
+        runtime.experienceLevel = level;
+        if (!firstSample) {
+            notifyTrigger(player, TriggerKeys.EXPERIENCE_LEVEL);
+        }
+    }
+
+    /**
+     * Compares a cheap signature of the inventory a few times a second, and only while some quest
+     * actually has an item condition. A change fires {@link TriggerKeys#INVENTORY}.
+     */
+    private void sampleInventory(ServerPlayer player, PlayerRuntime runtime, long tick) {
+        if ((tick + player.getId()) % INVENTORY_SAMPLE_INTERVAL != 0
+                || registry.questsForTrigger(TriggerKeys.INVENTORY).isEmpty()) {
+            return;
+        }
+        Inventory inventory = player.getInventory();
+        int signature = 1;
+        for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
+            ItemStack stack = inventory.getItem(slot);
+            if (!stack.isEmpty()) {
+                signature = 31 * signature + slot;
+                signature = 31 * signature + stack.getItem().hashCode();
+                signature = 31 * signature + stack.getCount();
+            }
+        }
+        boolean changed = runtime.inventorySampled && signature != runtime.inventorySignature;
+        runtime.inventorySignature = signature;
+        runtime.inventorySampled = true;
+        if (changed) {
+            notifyTrigger(player, TriggerKeys.INVENTORY);
+        }
+    }
+
+    /**
+     * Once a second, compares the overworld's day/night and weather with the last reading and fires
+     * {@link TriggerKeys#TIME_OF_DAY} or {@link TriggerKeys#WEATHER} for every player when they
+     * changed. This runs once per tick however many players there are.
+     */
+    private void sampleWorldTriggers(long tick) {
+        if (tick == lastWorldCheckTick) {
+            return;
+        }
+        lastWorldCheckTick = tick;
+        if (tick % SLOW_TICK_INTERVAL != 0) {
+            return;
+        }
+        ServerLevel overworld = server.overworld();
+        boolean bright = overworld.isBrightOutside();
+        int weather = overworld.isThundering() ? 2 : overworld.isRaining() ? 1 : 0;
+        boolean timeChanged = worldSampled && bright != lastBright;
+        boolean weatherChanged = worldSampled && weather != lastWeather;
+        lastBright = bright;
+        lastWeather = weather;
+        worldSampled = true;
+        if (timeChanged) {
+            notifyAllPlayers(TriggerKeys.TIME_OF_DAY);
+        }
+        if (weatherChanged) {
+            notifyAllPlayers(TriggerKeys.WEATHER);
+        }
+    }
+
+    private void notifyAllPlayers(Identifier trigger) {
+        for (ServerPlayer player : new ArrayList<>(server.getPlayerList().getPlayers())) {
+            notifyTrigger(player, trigger);
+        }
     }
 
     /**
@@ -466,38 +808,39 @@ public final class QuestManagerImpl implements QuestManager {
      * Moves any {@code REWARDED} repeatable quest whose cooldown has elapsed back to {@code
      * AVAILABLE} (or {@code LOCKED}, if its prerequisites have since regressed).
      */
-    private void checkRepeatableResets(ServerPlayer player) {
-        if (server == null) {
+    private void checkRepeatableResets(ServerPlayer player, PlayerRuntime runtime) {
+        if (server == null || runtime.repeatable.isEmpty()) {
             return;
         }
         PlayerQuestData data = dataFor(player);
-        List<Identifier> toReset = new java.util.ArrayList<>();
-        for (Map.Entry<Identifier, QuestProgress> entry : data.progress().entrySet()) {
-            if (entry.getValue().state() != QuestState.REWARDED) {
+        List<Quest> toReset = new ArrayList<>();
+        for (Identifier questId : runtime.repeatable) {
+            QuestProgress progress = data.get(questId);
+            if (progress == null || progress.state() != QuestState.REWARDED) {
                 continue;
             }
-            Quest quest = registry.getQuest(entry.getKey()).orElse(null);
+            Quest quest = registry.getQuest(questId).orElse(null);
             if (quest == null || !quest.repeatable()) {
                 continue;
             }
-            if (repeatableCooldownElapsed(quest, entry.getValue())) {
-                toReset.add(entry.getKey());
+            if (repeatableCooldownElapsed(quest, progress)) {
+                toReset.add(quest);
             }
         }
         if (toReset.isEmpty()) {
             return;
         }
-        for (Identifier questId : toReset) {
-            data.progress().remove(questId);
+        for (Quest quest : toReset) {
+            data.progress().remove(quest.id());
         }
         markDirty();
-        refreshAvailability(player);
-        for (Identifier questId : toReset) {
-            registry.getQuest(questId).ifPresent(quest -> {
-                for (QuestEventListener listener : QuestEvents.listeners()) {
-                    listener.onQuestReset(player, quest);
-                }
-            });
+        invalidateRuntime(player);
+        evaluateQuests(player, toReset);
+        for (Quest quest : toReset) {
+            for (QuestEventListener listener : QuestEvents.listeners()) {
+                listener.onQuestReset(player, quest);
+            }
+            notifyQuestChanged(player, quest);
         }
     }
 
@@ -510,21 +853,25 @@ public final class QuestManagerImpl implements QuestManager {
         if (server == null) {
             return;
         }
+        List<Identifier> active = currentRuntime(player).active;
+        if (active.isEmpty()) {
+            return;
+        }
         PlayerQuestData data = dataFor(player);
         QuestContext ctx = new QuestContext(player, this);
         boolean changed = false;
         List<Identifier> failedQuests = new ArrayList<>();
-        for (Map.Entry<Identifier, QuestProgress> entry : data.progress().entrySet()) {
-            QuestProgress progress = entry.getValue();
-            if (progress.state() != QuestState.ACTIVE) {
+        for (Identifier questId : active) {
+            QuestProgress progress = data.get(questId);
+            if (progress == null || progress.state() != QuestState.ACTIVE) {
                 continue;
             }
-            Quest quest = registry.getQuest(entry.getKey()).orElse(null);
+            Quest quest = registry.getQuest(questId).orElse(null);
             if (quest == null) {
                 continue;
             }
             if (triggersFailure(quest, progress, eventKey)) {
-                failedQuests.add(entry.getKey());
+                failedQuests.add(questId);
                 continue;
             }
             List<ObjectiveDefinition> objectives = quest.objectives();
@@ -573,6 +920,7 @@ public final class QuestManagerImpl implements QuestManager {
         }
         progress.setState(QuestState.COMPLETED);
         progress.setCompletedAt(System.currentTimeMillis());
+        invalidateRuntime(player);
         for (QuestEventListener listener : QuestEvents.listeners()) {
             listener.onQuestCompleted(player, quest);
         }

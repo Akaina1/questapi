@@ -3,6 +3,7 @@ package com.ryankshah.questapi.impl;
 import com.ryankshah.questapi.api.QuestRegistry;
 import com.ryankshah.questapi.api.quest.Quest;
 import com.ryankshah.questapi.api.quest.QuestCategory;
+import com.ryankshah.questapi.api.quest.QuestlineDefinition;
 import com.ryankshah.questapi.api.quest.condition.ConditionType;
 import com.ryankshah.questapi.api.quest.condition.QuestCondition;
 import com.ryankshah.questapi.api.quest.objective.ObjectiveDefinition;
@@ -15,10 +16,13 @@ import net.minecraft.resources.Identifier;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 public final class QuestRegistryImpl implements QuestRegistry {
 
@@ -27,6 +31,15 @@ public final class QuestRegistryImpl implements QuestRegistry {
     private final Map<Identifier, ObjectiveType<?>> objectiveTypes = new LinkedHashMap<>();
     private final Map<Identifier, RewardType<?>> rewardTypes = new LinkedHashMap<>();
     private final Map<Identifier, ConditionType<?>> conditionTypes = new LinkedHashMap<>();
+    private final Map<Identifier, QuestlineDefinition> questlines = new LinkedHashMap<>();
+
+    /** Deepest questline nesting followed; also stops a parent cycle from looping forever. */
+    private static final int MAX_QUESTLINE_DEPTH = 8;
+
+    private Map<Identifier, List<Quest>> triggerIndex = Map.of();
+    private Map<Identifier, List<QuestlineDefinition>> closeIndex = Map.of();
+    private Map<Identifier, List<Quest>> questlineQuests = Map.of();
+    private boolean indexDirty = true;
 
     @Override
     public void registerCategory(QuestCategory category) {
@@ -54,6 +67,7 @@ public final class QuestRegistryImpl implements QuestRegistry {
             throw new IllegalStateException("Quest " + quest.id() + " references unregistered category " + quest.categoryId());
         }
         quests.put(quest.id(), quest);
+        indexDirty = true;
         for (QuestEventListener listener : QuestEvents.listeners()) {
             listener.onQuestRegistered(quest);
         }
@@ -72,6 +86,98 @@ public final class QuestRegistryImpl implements QuestRegistry {
     @Override
     public void removeQuest(Identifier id) {
         quests.remove(id);
+        indexDirty = true;
+    }
+
+    @Override
+    public void registerQuestline(QuestlineDefinition questline) {
+        questlines.put(questline.id(), questline);
+        indexDirty = true;
+    }
+
+    @Override
+    public Collection<QuestlineDefinition> questlines() {
+        return questlines.values();
+    }
+
+    @Override
+    public Optional<QuestlineDefinition> getQuestline(Identifier id) {
+        return Optional.ofNullable(questlines.get(id));
+    }
+
+    @Override
+    public void removeQuestline(Identifier id) {
+        questlines.remove(id);
+        indexDirty = true;
+    }
+
+    @Override
+    public List<Quest> questsForTrigger(Identifier trigger) {
+        ensureIndex();
+        return triggerIndex.getOrDefault(trigger, List.of());
+    }
+
+    @Override
+    public List<QuestlineDefinition> questlinesClosedBy(Identifier trigger) {
+        ensureIndex();
+        return closeIndex.getOrDefault(trigger, List.of());
+    }
+
+    @Override
+    public List<Quest> questsInQuestline(Identifier questlineId) {
+        ensureIndex();
+        return questlineQuests.getOrDefault(questlineId, List.of());
+    }
+
+    /**
+     * Rebuilds the trigger lookups the first time they are needed after the quest or questline
+     * definitions changed. The lookups depend only on definitions, never on a player, so one copy
+     * serves everyone and a rebuild only happens on registration or reload.
+     */
+    private void ensureIndex() {
+        if (!indexDirty) {
+            return;
+        }
+        Map<Identifier, List<Quest>> byTrigger = new HashMap<>();
+        Map<Identifier, List<QuestlineDefinition>> byClose = new HashMap<>();
+        Map<Identifier, List<Quest>> byQuestline = new HashMap<>();
+
+        for (Quest quest : quests.values()) {
+            Set<Identifier> keys = new LinkedHashSet<>();
+            for (QuestCondition condition : quest.prerequisites()) {
+                keys.addAll(condition.triggers());
+            }
+            Identifier lineId = quest.questline().orElse(null);
+            for (int depth = 0; lineId != null && depth < MAX_QUESTLINE_DEPTH; depth++) {
+                QuestlineDefinition line = questlines.get(lineId);
+                if (line == null) {
+                    break;
+                }
+                for (QuestCondition condition : line.opensWhen()) {
+                    keys.addAll(condition.triggers());
+                }
+                byQuestline.computeIfAbsent(lineId, key -> new ArrayList<>()).add(quest);
+                lineId = line.parent().orElse(null);
+            }
+            for (Identifier key : keys) {
+                byTrigger.computeIfAbsent(key, k -> new ArrayList<>()).add(quest);
+            }
+        }
+
+        for (QuestlineDefinition line : questlines.values()) {
+            Set<Identifier> keys = new LinkedHashSet<>();
+            for (QuestCondition condition : line.closesWhen()) {
+                keys.addAll(condition.triggers());
+            }
+            for (Identifier key : keys) {
+                byClose.computeIfAbsent(key, k -> new ArrayList<>()).add(line);
+            }
+        }
+
+        triggerIndex = byTrigger;
+        closeIndex = byClose;
+        questlineQuests = byQuestline;
+        indexDirty = false;
     }
 
     @Override
@@ -125,5 +231,7 @@ public final class QuestRegistryImpl implements QuestRegistry {
     public void clearQuests() {
         quests.clear();
         categories.clear();
+        questlines.clear();
+        indexDirty = true;
     }
 }

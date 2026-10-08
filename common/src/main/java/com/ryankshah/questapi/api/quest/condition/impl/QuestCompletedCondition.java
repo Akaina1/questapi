@@ -6,8 +6,11 @@ import com.ryankshah.questapi.api.quest.QuestContext;
 import com.ryankshah.questapi.api.quest.QuestState;
 import com.ryankshah.questapi.api.quest.condition.ConditionType;
 import com.ryankshah.questapi.api.quest.condition.QuestCondition;
+import com.ryankshah.questapi.api.quest.condition.TriggerKeys;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
+
+import java.util.List;
 
 /**
  * Requires another quest to have been completed (rewards claimed) before this one unlocks. The
@@ -43,6 +46,11 @@ public final class QuestCompletedCondition implements QuestCondition {
     public boolean test(QuestContext context) {
         QuestState state = context.manager().getState(context.player(), requiredQuestId);
         return state == QuestState.REWARDED;
+    }
+
+    @Override
+    public List<Identifier> triggers() {
+        return List.of(TriggerKeys.quest(requiredQuestId));
     }
 
     public Identifier requiredQuestId() {

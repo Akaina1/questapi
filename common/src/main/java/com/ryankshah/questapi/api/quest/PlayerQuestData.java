@@ -7,17 +7,19 @@ import net.minecraft.resources.Identifier;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
  * All quest progress for a single player, keyed by quest ID.
  * <p>
- * Quests the player has never interacted with are not present in {@link #progress} at all; callers
- * should treat a missing entry as {@link QuestState#LOCKED} (or {@code AVAILABLE} if the quest has no
- * prerequisites), which {@code QuestManager} materialises lazily rather than eagerly creating an
- * entry for every registered quest for every player.
+ * Only quests the player has started (ACTIVE, COMPLETED, REWARDED, FAILED) are present in
+ * {@link #progress}. Callers should treat a missing entry as LOCKED, AVAILABLE or PERMANENTLY_LOCKED
+ * depending on the player's current conditions, which {@code QuestManager#getState} computes on
+ * demand rather than storing an entry for every registered quest for every player.
  */
 public final class PlayerQuestData {
 
@@ -26,7 +28,9 @@ public final class PlayerQuestData {
 
             Codec.unboundedMap(Identifier.CODEC, QuestProgress.CODEC).fieldOf("quests").forGetter(PlayerQuestData::progressRaw),
 
-            Identifier.CODEC.listOf().optionalFieldOf("tracked", List.of()).forGetter(PlayerQuestData::tracked)
+            Identifier.CODEC.listOf().optionalFieldOf("tracked", List.of()).forGetter(PlayerQuestData::tracked),
+
+            Identifier.CODEC.listOf().optionalFieldOf("unlockSeen", List.of()).forGetter(PlayerQuestData::unlockSeenList)
     ).apply(instance, PlayerQuestData::new));
 
     /** The most quests that can be pinned to the HUD tracker at once. */
@@ -35,15 +39,36 @@ public final class PlayerQuestData {
     private final UUID playerId;
     private final Map<Identifier, QuestProgress> progress;
     private final List<Identifier> tracked;
+    private final Set<Identifier> unlockSeen;
 
-    public PlayerQuestData(UUID playerId, Map<Identifier, QuestProgress> progress, List<Identifier> tracked) {
+    public PlayerQuestData(UUID playerId, Map<Identifier, QuestProgress> progress, List<Identifier> tracked, List<Identifier> unlockSeen) {
         this.playerId = playerId;
         this.progress = new HashMap<>(progress);
         this.tracked = new ArrayList<>(tracked);
+        this.unlockSeen = new HashSet<>(unlockSeen);
     }
 
     public static PlayerQuestData empty(UUID playerId) {
-        return new PlayerQuestData(playerId, Map.of(), List.of());
+        return new PlayerQuestData(playerId, Map.of(), List.of(), List.of());
+    }
+
+    /**
+     * Records that the player has been told {@code questId} unlocked, so the unlock toast and
+     * {@code onQuestUnlocked} fire only the first time even though availability is computed live and
+     * can flip back and forth.
+     *
+     * @return whether this was the first time
+     */
+    public boolean markUnlockSeen(Identifier questId) {
+        return unlockSeen.add(questId);
+    }
+
+    public boolean hasSeenUnlock(Identifier questId) {
+        return unlockSeen.contains(questId);
+    }
+
+    private List<Identifier> unlockSeenList() {
+        return List.copyOf(unlockSeen);
     }
 
     /**
@@ -127,6 +152,6 @@ public final class PlayerQuestData {
         for (Map.Entry<Identifier, QuestProgress> entry : progress.entrySet()) {
             copiedProgress.put(entry.getKey(), entry.getValue().copy());
         }
-        return new PlayerQuestData(playerId, copiedProgress, tracked);
+        return new PlayerQuestData(playerId, copiedProgress, tracked, List.copyOf(unlockSeen));
     }
 }

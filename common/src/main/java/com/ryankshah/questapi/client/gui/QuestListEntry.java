@@ -40,7 +40,7 @@ public final class QuestListEntry extends ObjectSelectionList.Entry<QuestListEnt
             graphics.fill(x, y, x + width, y + height, 0x40FFFFFF);
         }
 
-        boolean locked = state == QuestState.LOCKED;
+        boolean locked = state == QuestState.LOCKED || state == QuestState.PERMANENTLY_LOCKED;
 
         int iconX = x + 3;
         int iconY = y + (height - 16) / 2;

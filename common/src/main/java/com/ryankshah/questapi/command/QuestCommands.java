@@ -3,7 +3,6 @@ package com.ryankshah.questapi.command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.ryankshah.questapi.QuestApi;
-import com.ryankshah.questapi.api.quest.PlayerQuestData;
 import com.ryankshah.questapi.api.quest.Quest;
 import com.ryankshah.questapi.api.quest.QuestProgress;
 import com.ryankshah.questapi.api.quest.QuestState;
@@ -81,10 +80,15 @@ public final class QuestCommands {
     }
 
     private static int unlockQuest(CommandSourceStack source, ServerPlayer player, Identifier questId) {
-        PlayerQuestData data = QuestApi.manager().dataFor(player);
-        data.getOrCreate(questId).setState(QuestState.AVAILABLE);
+        if (QuestApi.registry().getQuest(questId).isEmpty()) {
+            source.sendFailure(Component.literal("Unknown quest " + questId));
+            return 0;
+        }
+        QuestApi.manager().refreshAvailability(player);
         QuestNetworking.sendProgress(player);
-        source.sendSuccess(() -> Component.literal("Force-unlocked quest " + questId + " for " + player.getName().getString()), true);
+        QuestState state = QuestApi.manager().getState(player, questId);
+        source.sendSuccess(() -> Component.literal("Re-evaluated availability for " + player.getName().getString()
+                + "; quest " + questId + " is " + state), true);
         return 1;
     }
 

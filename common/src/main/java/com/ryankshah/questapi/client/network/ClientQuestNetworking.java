@@ -27,7 +27,11 @@ public final class ClientQuestNetworking {
     }
 
     public static void handleSyncDefinitions(ClientboundSyncDefinitionsPayload payload) {
-        ClientQuestDataCache.INSTANCE.setDefinitions(payload.categories(), payload.quests(), payload.manualActions(), payload.ticksPerGameDay());
+        if (payload.replaceQuests()) {
+            ClientQuestDataCache.INSTANCE.setDefinitions(payload.categories(), payload.quests(), payload.manualActions(), payload.ticksPerGameDay());
+        } else {
+            ClientQuestDataCache.INSTANCE.addQuests(payload.quests());
+        }
     }
 
     public static void handleSyncProgress(PlayerQuestData data) {
