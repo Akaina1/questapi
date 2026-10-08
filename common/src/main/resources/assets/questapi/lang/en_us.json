@@ -60,6 +60,7 @@
   "questapi.gui.objective.optional": "(Optional)",
   "questapi.gui.objective.choose_one": "Choose one:",
   "questapi.gui.objective.choose_n": "Choose %1$s:",
+  "questapi.gui.objective.complete_all": "Complete all:",
   "questapi.gui.empty": "Nothing here yet.",
   "questapi.gui.state.rewarded.repeatable": "Complete (repeats)",
   "questapi.gui.time_limit": "Time limit: %1$s",

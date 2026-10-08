@@ -495,9 +495,11 @@ public final class QuestScreen extends Screen {
                 cursorY = drawObjective(graphics, quest, progress, state, first, x, cursorY, width, entry.optional());
                 continue;
             }
-            Component header = entry.required() == 1
-                    ? Component.translatable("questapi.gui.objective.choose_one")
-                    : Component.translatable("questapi.gui.objective.choose_n", entry.required());
+            Component header = entry.isAllOf()
+                    ? Component.translatable("questapi.gui.objective.complete_all")
+                    : entry.required() == 1
+                            ? Component.translatable("questapi.gui.objective.choose_one")
+                            : Component.translatable("questapi.gui.objective.choose_n", entry.required());
             if (entry.optional()) {
                 header = header.copy().append(Component.literal(" ")).append(Component.translatable("questapi.gui.objective.optional"));
             }

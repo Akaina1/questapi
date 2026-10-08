@@ -39,4 +39,11 @@ public record ObjectiveEntry(List<ObjectiveDefinition> options, int required, bo
     public boolean isGroup() {
         return options.size() > 1;
     }
+
+    /**
+     * Whether this entry is a group in which every option must be completed.
+     */
+    public boolean isAllOf() {
+        return isGroup() && required == options.size();
+    }
 }

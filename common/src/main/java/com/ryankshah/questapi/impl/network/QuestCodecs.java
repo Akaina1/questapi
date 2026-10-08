@@ -56,6 +56,12 @@ public final class QuestCodecs {
      */
     public static final Identifier ANY_OF = Identifier.fromNamespaceAndPath("questapi", "any_of");
 
+    /**
+     * The {@code type} of a group whose options must all be completed ({@code {"type":
+     * "questapi:all_of", "optional": false, "options": [...]}}).
+     */
+    public static final Identifier ALL_OF = Identifier.fromNamespaceAndPath("questapi", "all_of");
+
     private record RawGroup(List<ObjectiveDefinition> options, int count, boolean optional) {
     }
 
@@ -86,28 +92,47 @@ public final class QuestCodecs {
             }
             return DataResult.success(new ObjectiveEntry(raw.options(), raw.count(), raw.optional()));
         }, entry -> DataResult.success(new RawGroup(entry.options(), entry.required(), entry.optional()))).codec();
+        Codec<ObjectiveEntry> allOf = RecordCodecBuilder.<RawGroup>mapCodec(instance -> instance.group(
+                Identifier.CODEC.fieldOf("type").forGetter(raw -> ALL_OF),
+                objectiveCodec(registry).listOf().fieldOf("options").forGetter(RawGroup::options),
+                Codec.BOOL.optionalFieldOf("optional", false).forGetter(RawGroup::optional)
+        ).apply(instance, (type, options, optional) -> new RawGroup(options, options.size(), optional))).<ObjectiveEntry>flatXmap(raw -> {
+            if (raw.options().size() < 2) {
+                return DataResult.error(() -> "A questapi:all_of group needs at least 2 options");
+            }
+            return DataResult.success(new ObjectiveEntry(raw.options(), raw.options().size(), raw.optional()));
+        }, entry -> DataResult.success(new RawGroup(entry.options(), entry.required(), entry.optional()))).codec();
         Codec<ObjectiveEntry> singleCodec = single.codec();
         return new Codec<>() {
             @Override
             public <T> DataResult<Pair<ObjectiveEntry, T>> decode(DynamicOps<T> ops, T input) {
-                boolean isGroup = ops.getMap(input).result()
+                String type = ops.getMap(input).result()
                         .map(map -> map.get("type"))
-                        .flatMap(type -> ops.getStringValue(type).result())
-                        .map(name -> name.equals(ANY_OF.toString()))
-                        .orElse(false);
-                return (isGroup ? group : singleCodec).decode(ops, input);
+                        .flatMap(value -> ops.getStringValue(value).result())
+                        .orElse("");
+                if (type.equals(ANY_OF.toString())) {
+                    return group.decode(ops, input);
+                }
+                if (type.equals(ALL_OF.toString())) {
+                    return allOf.decode(ops, input);
+                }
+                return singleCodec.decode(ops, input);
             }
 
             @Override
             public <T> DataResult<T> encode(ObjectiveEntry entry, DynamicOps<T> ops, T prefix) {
+                // A group that needs every option is written as all_of, any other group as any_of.
+                if (entry.isAllOf()) {
+                    return allOf.encode(entry, ops, prefix);
+                }
                 return (entry.isGroup() ? group : singleCodec).encode(entry, ops, prefix);
             }
         };
     }
 
     private static MapCodec<? extends ObjectiveDefinition> lookupObjective(QuestRegistry registry, Identifier id) {
-        if (id.equals(ANY_OF)) {
-            throw new IllegalArgumentException("A questapi:any_of group can't be placed inside another group");
+        if (id.equals(ANY_OF) || id.equals(ALL_OF)) {
+            throw new IllegalArgumentException("A " + id + " group can't be placed inside another group");
         }
         ObjectiveType<?> type = registry.getObjectiveType(id)
                 .orElseThrow(() -> new IllegalArgumentException("Unknown objective type: " + id));
