@@ -36,6 +36,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalInt;
 import java.util.UUID;
 
 public final class QuestManagerImpl implements QuestManager {
@@ -150,6 +151,19 @@ public final class QuestManagerImpl implements QuestManager {
      * Nothing is saved, so the answer can never be stale.
      */
     private QuestState computedState(ServerPlayer player, Quest quest) {
+        OptionalInt chapter = registry.chapterOf(quest.id());
+        if (chapter.isPresent()) {
+            switch (chapterStatus(player, chapter.getAsInt())) {
+                case CLOSED -> {
+                    return QuestState.PERMANENTLY_LOCKED;
+                }
+                case NOT_YET -> {
+                    return QuestState.LOCKED;
+                }
+                default -> {
+                }
+            }
+        }
         QuestContext ctx = new QuestContext(player, this);
         if (quest.questline().isPresent()) {
             switch (questlineStatus(ctx, quest.questline().get())) {
@@ -164,6 +178,53 @@ public final class QuestManagerImpl implements QuestManager {
             }
         }
         return passesPrerequisites(ctx, quest) ? QuestState.AVAILABLE : QuestState.LOCKED;
+    }
+
+    /**
+     * How a chapter stands for one player. It is closed once any of its final quests was handed in,
+     * and not open yet while the chapter before it is still running. Only stored quest states are
+     * read, so this never recurses into {@link #getState}. Chapter 1 is never "not yet".
+     */
+    private QuestlineStatus chapterStatus(ServerPlayer player, int chapter) {
+        if (isChapterEnded(player, chapter)) {
+            return QuestlineStatus.CLOSED;
+        }
+        if (chapter > 1 && !isChapterEnded(player, chapter - 1)) {
+            return QuestlineStatus.NOT_YET;
+        }
+        return QuestlineStatus.OPEN;
+    }
+
+    private boolean isChapterEnded(ServerPlayer player, int chapter) {
+        PlayerQuestData data = dataFor(player);
+        for (Quest finalQuest : registry.chapterFinals(chapter)) {
+            QuestProgress progress = data.get(finalQuest.id());
+            if (progress != null && progress.state() == QuestState.REWARDED) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Runs when a chapter final quest was just handed in. Every quest the player started in that
+     * chapter and has not finished (still active, or completed but not claimed) fails, then the
+     * quests of the next chapter are re-checked so they announce themselves and auto-start. Quests
+     * that were never started need nothing: they read as permanently locked on their own.
+     */
+    private void endChapter(ServerPlayer player, Quest finalQuest) {
+        OptionalInt chapter = registry.chapterOf(finalQuest.id());
+        if (chapter.isEmpty() || !isChapterEnded(player, chapter.getAsInt())) {
+            return;
+        }
+        PlayerQuestData data = dataFor(player);
+        for (Quest quest : new ArrayList<>(registry.questsInChapter(chapter.getAsInt()))) {
+            QuestProgress progress = data.get(quest.id());
+            if (progress != null && (progress.state() == QuestState.ACTIVE || progress.state() == QuestState.COMPLETED)) {
+                failQuest(player, quest.id(), true);
+            }
+        }
+        evaluateQuests(player, registry.questsInChapter(chapter.getAsInt() + 1));
     }
 
     /**
@@ -440,9 +501,22 @@ public final class QuestManagerImpl implements QuestManager {
 
     @Override
     public boolean failQuest(ServerPlayer player, Identifier questId) {
+        return failQuest(player, questId, false);
+    }
+
+    /**
+     * Fails a quest. Only a chapter ending passes {@code includeCompleted}, because a quest whose
+     * objectives are done but whose rewards were not claimed is lost with its chapter.
+     */
+    private boolean failQuest(ServerPlayer player, Identifier questId, boolean includeCompleted) {
         Quest quest = registry.getQuest(questId).orElse(null);
         QuestProgress progress = dataFor(player).get(questId);
-        if (quest == null || progress == null || progress.state() != QuestState.ACTIVE) {
+        if (quest == null || progress == null) {
+            return false;
+        }
+        boolean failable = progress.state() == QuestState.ACTIVE
+                || (includeCompleted && progress.state() == QuestState.COMPLETED);
+        if (!failable) {
             return false;
         }
         progress.setState(QuestState.FAILED);
@@ -590,6 +664,9 @@ public final class QuestManagerImpl implements QuestManager {
             listener.onRewardClaimed(player, quest);
         }
         notifyQuestChanged(player, quest);
+        if (quest.chapterFinal()) {
+            endChapter(player, quest);
+        }
         return true;
     }
 

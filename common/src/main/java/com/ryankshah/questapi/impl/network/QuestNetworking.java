@@ -8,6 +8,7 @@ import com.ryankshah.questapi.api.quest.QuestProgress;
 import com.ryankshah.questapi.api.quest.QuestToastOverrides;
 import com.ryankshah.questapi.api.quest.objective.ObjectiveProgress;
 import com.ryankshah.questapi.impl.DevConfig;
+import com.ryankshah.questapi.impl.network.payload.ClientboundChapterEndingPayload;
 import com.ryankshah.questapi.impl.network.payload.ClientboundObjectiveCompletedPayload;
 import com.ryankshah.questapi.impl.network.payload.ClientboundQuestCompletedPayload;
 import com.ryankshah.questapi.impl.network.payload.ClientboundQuestFailedPayload;
@@ -27,6 +28,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -173,6 +175,23 @@ public final class QuestNetworking {
         }
         Services.NETWORK.sendToPlayer(player, new ClientboundQuestFailedPayload(
                 toastTitle(quest, QuestToastOverrides::failed, "questapi.toast.quest_failed.title"), quest.title()));
+    }
+
+    /**
+     * Warns that handing in a chapter final quest ends its chapter. One static message for every
+     * chapter: the chapter number and the finale quest's title are the only parts that change.
+     */
+    public static void sendChapterEnding(ServerPlayer player, Quest quest) {
+        if (!DevConfig.showChapterEndingToast()) {
+            return;
+        }
+        OptionalInt chapter = QuestApi.registry().chapterOf(quest.id());
+        if (chapter.isEmpty()) {
+            return;
+        }
+        Services.NETWORK.sendToPlayer(player, new ClientboundChapterEndingPayload(
+                Component.translatable("questapi.toast.chapter_ending.title"),
+                Component.translatable("questapi.toast.chapter_ending.message", chapter.getAsInt(), quest.title())));
     }
 
     public static void sendQuestUnlocked(ServerPlayer player, Quest quest) {

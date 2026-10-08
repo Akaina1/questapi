@@ -77,6 +77,8 @@
   "questapi.toast.quest_unlocked.title": "New quest available",
   "questapi.toast.quest_started.title": "Quest accepted",
   "questapi.toast.quest_failed.title": "Quest failed",
+  "questapi.toast.chapter_ending.title": "Chapter ending",
+  "questapi.toast.chapter_ending.message": "You are at the end of Chapter %1$s. Any uncompleted tasks will fail after turning in %2$s.",
 
   "key.questapi.open_quests": "Open Quest Book"
 }

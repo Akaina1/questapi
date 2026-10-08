@@ -28,11 +28,15 @@ public final class Quest {
     private final Optional<QuestFailureRules> failure;
     private final Optional<QuestToastOverrides> toastOverrides;
     private final Optional<Identifier> questline;
+    private final Optional<Integer> chapter;
+    private final boolean chapterFinal;
 
     private Quest(Builder builder) {
         this.id = builder.id;
         this.categoryId = builder.categoryId;
         this.questline = Optional.ofNullable(builder.questline);
+        this.chapter = Optional.ofNullable(builder.chapter);
+        this.chapterFinal = builder.chapterFinal;
         this.display = new QuestDisplay(builder.title, builder.description, builder.icon, builder.sortOrder);
         this.lifecycle = new QuestLifecycle(builder.autoActivate, builder.sequential,
                 builder.repeatable ? Optional.of(new QuestRepeat(builder.resetMode, builder.resetAmount)) : Optional.empty());
@@ -101,6 +105,22 @@ public final class Quest {
      */
     public Optional<Identifier> questline() {
         return questline;
+    }
+
+    /**
+     * The chapter this quest itself is placed in, if any. A quest without one still belongs to the
+     * chapter of its questline; use {@code QuestRegistry#chapterOf} for the effective chapter.
+     */
+    public Optional<Integer> chapter() {
+        return chapter;
+    }
+
+    /**
+     * Whether handing this quest in ends its chapter: everything left in the chapter fails or is
+     * locked for good, and the next chapter opens.
+     */
+    public boolean chapterFinal() {
+        return chapterFinal;
     }
 
     public List<ObjectiveDefinition> objectives() {
@@ -199,9 +219,30 @@ public final class Quest {
         private QuestFailureRules failure = null;
         private QuestToastOverrides toastOverrides = null;
         private Identifier questline = null;
+        private Integer chapter = null;
+        private boolean chapterFinal = false;
 
         private Builder(Identifier id) {
             this.id = id;
+        }
+
+        /**
+         * Places this quest in a numbered chapter (1 or higher).
+         */
+        public Builder chapter(int chapter) {
+            if (chapter < 1) {
+                throw new IllegalArgumentException("Quest " + id + " chapter must be 1 or higher");
+            }
+            this.chapter = chapter;
+            return this;
+        }
+
+        /**
+         * Marks this quest as an ending of its chapter.
+         */
+        public Builder chapterFinal(boolean chapterFinal) {
+            this.chapterFinal = chapterFinal;
+            return this;
         }
 
         /**

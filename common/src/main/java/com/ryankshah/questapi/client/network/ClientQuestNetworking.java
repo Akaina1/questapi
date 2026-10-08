@@ -23,6 +23,12 @@ import net.minecraft.sounds.SoundEvents;
  */
 public final class ClientQuestNetworking {
 
+    /**
+     * Its own toast id, so the warning is not swapped for the "ready to turn in" toast that appears
+     * at the same moment (toasts sharing an id replace each other). Shown longer than the default.
+     */
+    private static final SystemToast.SystemToastId CHAPTER_ENDING_TOAST = new SystemToast.SystemToastId(10_000L);
+
     private ClientQuestNetworking() {
     }
 
@@ -57,6 +63,12 @@ public final class ClientQuestNetworking {
         minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.ANVIL_LAND, 0.6F));
         SystemToast.add(minecraft.gui.toastManager(), SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
                 toastTitle, questTitle);
+    }
+
+    public static void handleChapterEnding(Component title, Component message) {
+        Minecraft minecraft = Minecraft.getInstance();
+        minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.ANVIL_LAND, 0.6F));
+        SystemToast.add(minecraft.gui.toastManager(), CHAPTER_ENDING_TOAST, title, message);
     }
 
     public static void handleObjectiveCompleted(Component objectiveDescription) {

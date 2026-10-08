@@ -155,8 +155,10 @@ public final class QuestCodecs {
                 conditionCodec(registry).listOf().optionalFieldOf("prerequisites", List.of()).forGetter(Quest::prerequisites),
                 failureCodec(registry).optionalFieldOf("failure").forGetter(Quest::failure),
                 toastOverridesCodec().optionalFieldOf("toast_overrides").forGetter(Quest::toastOverrides),
-                Identifier.CODEC.optionalFieldOf("questline").forGetter(Quest::questline)
-        ).apply(instance, (id, category, display, lifecycle, objectives, rewards, prerequisites, failure, toastOverrides, questline) -> {
+                Identifier.CODEC.optionalFieldOf("questline").forGetter(Quest::questline),
+                Codec.intRange(1, Integer.MAX_VALUE).optionalFieldOf("chapter").forGetter(Quest::chapter),
+                Codec.BOOL.optionalFieldOf("chapter_final", false).forGetter(Quest::chapterFinal)
+        ).apply(instance, (id, category, display, lifecycle, objectives, rewards, prerequisites, failure, toastOverrides, questline, chapter, chapterFinal) -> {
             Quest.Builder builder = Quest.builder(id)
                     .category(category)
                     .title(display.title())
@@ -172,6 +174,8 @@ public final class QuestCodecs {
             failure.ifPresent(builder::failure);
             toastOverrides.ifPresent(builder::toastOverrides);
             questline.ifPresent(builder::questline);
+            chapter.ifPresent(builder::chapter);
+            builder.chapterFinal(chapterFinal);
             return builder.build();
         }));
     }
@@ -182,7 +186,8 @@ public final class QuestCodecs {
                 Codec.STRING.optionalFieldOf("display_name", "").forGetter(QuestlineDefinition::displayName),
                 Identifier.CODEC.optionalFieldOf("parent").forGetter(QuestlineDefinition::parent),
                 conditionCodec(registry).listOf().optionalFieldOf("opens_when", List.of()).forGetter(QuestlineDefinition::opensWhen),
-                conditionCodec(registry).listOf().optionalFieldOf("closes_when", List.of()).forGetter(QuestlineDefinition::closesWhen)
+                conditionCodec(registry).listOf().optionalFieldOf("closes_when", List.of()).forGetter(QuestlineDefinition::closesWhen),
+                Codec.intRange(1, Integer.MAX_VALUE).optionalFieldOf("chapter").forGetter(QuestlineDefinition::chapter)
         ).apply(instance, QuestlineDefinition::new));
     }
 }

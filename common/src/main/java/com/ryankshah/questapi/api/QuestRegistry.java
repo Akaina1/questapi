@@ -15,6 +15,7 @@ import net.minecraft.resources.Identifier;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.OptionalInt;
 
 /**
  * The static side of the Questing API: quest definitions, categories, and the extensible type
@@ -80,6 +81,28 @@ public interface QuestRegistry {
      * Every quest in {@code questlineId}, including quests in questlines nested inside it.
      */
     List<Quest> questsInQuestline(Identifier questlineId);
+
+    /**
+     * The chapter a quest belongs to: its own {@code chapter}, or the nearest one found walking up
+     * its questline and that questline's parents. Empty if the quest is not tied to a chapter.
+     */
+    OptionalInt chapterOf(Identifier questId);
+
+    /**
+     * Every quest that belongs to {@code chapter}, directly or through its questlines.
+     */
+    List<Quest> questsInChapter(int chapter);
+
+    /**
+     * The quests of {@code chapter} marked {@code chapter_final}: turning in any one of them ends
+     * the chapter.
+     */
+    List<Quest> chapterFinals(int chapter);
+
+    /**
+     * Every chapter number that at least one quest belongs to, lowest first.
+     */
+    List<Integer> chapters();
 
     <D extends ObjectiveDefinition> void registerObjectiveType(ObjectiveType<D> type);
 

@@ -22,13 +22,16 @@ import java.util.Optional;
  * </ul>
  *
  * @param displayName English name shown to the player, or empty to fall back to the id
+ * @param chapter     the numbered chapter every quest in this questline belongs to unless it names
+ *                    its own, or empty to inherit the chapter of the parent questline
  */
 public record QuestlineDefinition(
         Identifier id,
         String displayName,
         Optional<Identifier> parent,
         List<QuestCondition> opensWhen,
-        List<QuestCondition> closesWhen
+        List<QuestCondition> closesWhen,
+        Optional<Integer> chapter
 ) {
 
     public QuestlineDefinition {

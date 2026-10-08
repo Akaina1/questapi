@@ -27,6 +27,7 @@ import java.io.Reader;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -55,6 +56,9 @@ public final class QuestDataLoader extends SimplePreparableReloadListener<QuestD
     private static final FileToIdConverter CATEGORIES = FileToIdConverter.json("questapi/categories");
     private static final FileToIdConverter QUESTS = FileToIdConverter.json("questapi/quests");
     private static final FileToIdConverter QUESTLINES = FileToIdConverter.json("questapi/questlines");
+
+    /** Deepest questline nesting followed; also stops a parent cycle from looping forever. */
+    private static final int MAX_QUESTLINE_DEPTH = 8;
 
     private final Set<Identifier> previousCategories = new HashSet<>();
     private final Set<Identifier> previousQuests = new HashSet<>();
@@ -131,6 +135,7 @@ public final class QuestDataLoader extends SimplePreparableReloadListener<QuestD
 
         validateFailureRules(quests.values(), registry);
         validateQuestlines(quests.values(), registry);
+        validateChapters(quests.values(), registry);
 
         if (!categories.isEmpty() || !quests.isEmpty()) {
             QuestApi.LOG.info("Loaded {} quest categor{} and {} quest{} from datapacks",
@@ -193,6 +198,60 @@ public final class QuestDataLoader extends SimplePreparableReloadListener<QuestD
                 parentId = registry.getQuestline(parentId).flatMap(QuestlineDefinition::parent).orElse(null);
             }
         }
+    }
+
+    /**
+     * Logs a warning for chapter setups that cannot work as written: a final quest that belongs to
+     * no chapter, a repeatable final quest (it would reopen the chapter when it resets), a chapter
+     * below the highest one in use that has no final quest (so the next chapter could never open;
+     * this also catches a skipped number), and a quest whose own chapter differs from the one its
+     * questline gives.
+     */
+    private static void validateChapters(Collection<Quest> quests, QuestRegistry registry) {
+        for (Quest quest : quests) {
+            if (quest.chapterFinal() && registry.chapterOf(quest.id()).isEmpty()) {
+                QuestApi.LOG.warn("Quest '{}' is chapter_final but belongs to no chapter, so it ends nothing", quest.id());
+            }
+            if (quest.chapterFinal() && quest.repeatable()) {
+                QuestApi.LOG.warn("Quest '{}' is chapter_final and repeatable, so it would reopen its chapter when it resets", quest.id());
+            }
+            Integer own = quest.chapter().orElse(null);
+            Integer inherited = questlineChapter(quest, registry);
+            if (own != null && inherited != null && !own.equals(inherited)) {
+                QuestApi.LOG.warn("Quest '{}' is in chapter {} but its questline is in chapter {}; the quest's own chapter wins",
+                        quest.id(), own, inherited);
+            }
+        }
+        List<Integer> chapters = registry.chapters();
+        if (chapters.isEmpty()) {
+            return;
+        }
+        int highest = chapters.get(chapters.size() - 1);
+        for (int chapter = 1; chapter < highest; chapter++) {
+            if (registry.chapterFinals(chapter).isEmpty()) {
+                QuestApi.LOG.warn("Chapter {} has no chapter_final quest, so it can never end and chapter {} and later never open",
+                        chapter, chapter + 1);
+            }
+        }
+    }
+
+    /**
+     * The chapter given by the nearest questline in a quest's questline chain, ignoring the quest's
+     * own chapter.
+     */
+    private static Integer questlineChapter(Quest quest, QuestRegistry registry) {
+        Identifier lineId = quest.questline().orElse(null);
+        for (int depth = 0; lineId != null && depth < MAX_QUESTLINE_DEPTH; depth++) {
+            QuestlineDefinition line = registry.getQuestline(lineId).orElse(null);
+            if (line == null) {
+                return null;
+            }
+            if (line.chapter().isPresent()) {
+                return line.chapter().get();
+            }
+            lineId = line.parent().orElse(null);
+        }
+        return null;
     }
 
     private static Map<Identifier, QuestlineDefinition> decodeQuestlines(Map<Identifier, JsonElement> raw, QuestRegistry registry, boolean devMode) {

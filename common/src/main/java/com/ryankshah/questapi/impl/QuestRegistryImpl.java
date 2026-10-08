@@ -22,7 +22,9 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.Set;
+import java.util.TreeMap;
 
 public final class QuestRegistryImpl implements QuestRegistry {
 
@@ -39,6 +41,10 @@ public final class QuestRegistryImpl implements QuestRegistry {
     private Map<Identifier, List<Quest>> triggerIndex = Map.of();
     private Map<Identifier, List<QuestlineDefinition>> closeIndex = Map.of();
     private Map<Identifier, List<Quest>> questlineQuests = Map.of();
+    private Map<Identifier, Integer> questChapters = Map.of();
+    private Map<Integer, List<Quest>> chapterQuests = Map.of();
+    private Map<Integer, List<Quest>> chapterFinalQuests = Map.of();
+    private List<Integer> chapterNumbers = List.of();
     private boolean indexDirty = true;
 
     @Override
@@ -129,6 +135,31 @@ public final class QuestRegistryImpl implements QuestRegistry {
         return questlineQuests.getOrDefault(questlineId, List.of());
     }
 
+    @Override
+    public OptionalInt chapterOf(Identifier questId) {
+        ensureIndex();
+        Integer chapter = questChapters.get(questId);
+        return chapter == null ? OptionalInt.empty() : OptionalInt.of(chapter);
+    }
+
+    @Override
+    public List<Quest> questsInChapter(int chapter) {
+        ensureIndex();
+        return chapterQuests.getOrDefault(chapter, List.of());
+    }
+
+    @Override
+    public List<Quest> chapterFinals(int chapter) {
+        ensureIndex();
+        return chapterFinalQuests.getOrDefault(chapter, List.of());
+    }
+
+    @Override
+    public List<Integer> chapters() {
+        ensureIndex();
+        return chapterNumbers;
+    }
+
     /**
      * Rebuilds the trigger lookups the first time they are needed after the quest or questline
      * definitions changed. The lookups depend only on definitions, never on a player, so one copy
@@ -141,12 +172,16 @@ public final class QuestRegistryImpl implements QuestRegistry {
         Map<Identifier, List<Quest>> byTrigger = new HashMap<>();
         Map<Identifier, List<QuestlineDefinition>> byClose = new HashMap<>();
         Map<Identifier, List<Quest>> byQuestline = new HashMap<>();
+        Map<Identifier, Integer> chapterByQuest = new HashMap<>();
+        Map<Integer, List<Quest>> byChapter = new TreeMap<>();
+        Map<Integer, List<Quest>> finalsByChapter = new HashMap<>();
 
         for (Quest quest : quests.values()) {
             Set<Identifier> keys = new LinkedHashSet<>();
             for (QuestCondition condition : quest.prerequisites()) {
                 keys.addAll(condition.triggers());
             }
+            Integer chapter = quest.chapter().orElse(null);
             Identifier lineId = quest.questline().orElse(null);
             for (int depth = 0; lineId != null && depth < MAX_QUESTLINE_DEPTH; depth++) {
                 QuestlineDefinition line = questlines.get(lineId);
@@ -157,7 +192,17 @@ public final class QuestRegistryImpl implements QuestRegistry {
                     keys.addAll(condition.triggers());
                 }
                 byQuestline.computeIfAbsent(lineId, key -> new ArrayList<>()).add(quest);
+                if (chapter == null) {
+                    chapter = line.chapter().orElse(null);
+                }
                 lineId = line.parent().orElse(null);
+            }
+            if (chapter != null) {
+                chapterByQuest.put(quest.id(), chapter);
+                byChapter.computeIfAbsent(chapter, key -> new ArrayList<>()).add(quest);
+                if (quest.chapterFinal()) {
+                    finalsByChapter.computeIfAbsent(chapter, key -> new ArrayList<>()).add(quest);
+                }
             }
             for (Identifier key : keys) {
                 byTrigger.computeIfAbsent(key, k -> new ArrayList<>()).add(quest);
@@ -177,6 +222,10 @@ public final class QuestRegistryImpl implements QuestRegistry {
         triggerIndex = byTrigger;
         closeIndex = byClose;
         questlineQuests = byQuestline;
+        questChapters = chapterByQuest;
+        chapterQuests = byChapter;
+        chapterFinalQuests = finalsByChapter;
+        chapterNumbers = List.copyOf(byChapter.keySet());
         indexDirty = false;
     }
 
