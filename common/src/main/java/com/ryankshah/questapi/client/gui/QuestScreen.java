@@ -1,6 +1,7 @@
 package com.ryankshah.questapi.client.gui;
 
 import com.ryankshah.questapi.api.quest.ManualQuestActions;
+import com.ryankshah.questapi.api.quest.ObjectiveEntry;
 import com.ryankshah.questapi.api.quest.Quest;
 import com.ryankshah.questapi.api.quest.QuestCategory;
 import com.ryankshah.questapi.api.quest.QuestFailureRules;
@@ -20,6 +21,7 @@ import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.FormattedText;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
 
 import java.util.ArrayList;
@@ -45,6 +47,8 @@ public final class QuestScreen extends Screen {
     private static final int GAP = 8;
     private static final int LINE_HEIGHT = 10;
     private static final int PROGRESS_BAR_HEIGHT = 3;
+    private static final int GROUP_INDENT = 8;
+    private static final int SCROLLBAR_WIDTH = 5;
 
     private static final int TAB_HEIGHT = 20;
     private static final int TAB_GAP = 2;
@@ -102,6 +106,12 @@ public final class QuestScreen extends Screen {
     private final List<DeliverButtonBounds> deliverButtons = new ArrayList<>();
     private int lastMouseX;
     private int lastMouseY;
+    /** The Y range detail text may currently be drawn in; anything outside it is skipped. */
+    private int clipTop = Integer.MIN_VALUE;
+    private int clipBottom = Integer.MAX_VALUE;
+    private int detailScroll;
+    /** Height of the scrollable detail text as of the last frame, used to limit scrolling. */
+    private int detailContentHeight;
 
     public QuestScreen() {
         super(Component.translatable("questapi.gui.title"));
@@ -167,6 +177,7 @@ public final class QuestScreen extends Screen {
     private void selectTab(Tab tab) {
         this.selectedTab = tab;
         this.selectedQuest = null;
+        this.detailScroll = 0;
         layoutTabs();
         refreshLists();
         refreshActionButton();
@@ -205,11 +216,15 @@ public final class QuestScreen extends Screen {
     private void selectCategory(QuestCategory category) {
         this.selectedCategory = category.id();
         this.selectedQuest = null;
+        this.detailScroll = 0;
         refreshLists();
         refreshActionButton();
     }
 
     private void selectQuest(Quest quest) {
+        if (selectedQuest == null || !selectedQuest.id().equals(quest.id())) {
+            this.detailScroll = 0;
+        }
         this.selectedQuest = quest;
         refreshActionButton();
     }
@@ -335,22 +350,102 @@ public final class QuestScreen extends Screen {
     private int drawWrapped(GuiGraphicsExtractor graphics, FormattedText text, int x, int y, int width, int color) {
         int cursorY = y;
         for (var line : font.split(text, width)) {
-            graphics.text(font, line, x, cursorY, color);
+            if (isVisible(cursorY, LINE_HEIGHT)) {
+                graphics.text(font, line, x, cursorY, color);
+            }
             cursorY += LINE_HEIGHT;
         }
         return cursorY;
     }
 
-    private void renderQuestDetail(GuiGraphicsExtractor graphics, Quest quest, int x, int y, int width) {
+    /**
+     * Whether something {@code height} tall drawn at {@code y} lies completely inside the region
+     * that is currently being drawn (see {@link #clipTop}). Content is culled line by line instead
+     * of being cut off halfway, which keeps scrolled text readable.
+     */
+    private boolean isVisible(int y, int height) {
+        return y >= clipTop && y + height <= clipBottom;
+    }
+
+    private int wrappedHeight(FormattedText text, int width) {
+        return font.split(text, width).size() * LINE_HEIGHT;
+    }
+
+    /**
+     * The lowest Y the detail text may reach: just above the action buttons if there are any, so
+     * text never runs under them.
+     */
+    private int detailAreaBottom() {
+        int bottom = topPos + panelHeight - MARGIN - 4;
+        for (Button button : new Button[]{actionButton, trackButton}) {
+            if (button != null) {
+                bottom = Math.min(bottom, button.getY() - 4);
+            }
+        }
+        return bottom;
+    }
+
+    /**
+     * Height of the always-visible rewards block (rewards, plus failure rewards if the quest has any).
+     */
+    private int rewardsHeight(Quest quest, int width) {
+        int height = wrappedHeight(Component.translatable("questapi.gui.rewards"), width);
+        for (QuestReward reward : quest.rewards()) {
+            height += wrappedHeight(Component.literal("- ").append(reward.describe()), width);
+        }
+        List<QuestReward> failureRewards = quest.failureRewards();
+        if (!failureRewards.isEmpty()) {
+            height += 4 + wrappedHeight(Component.translatable("questapi.gui.failure_rewards"), width);
+            for (QuestReward reward : failureRewards) {
+                height += wrappedHeight(Component.literal("- ").append(reward.describe()), width);
+            }
+        }
+        return height;
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if (selectedQuest != null && mouseX >= detailX - 4 && mouseX < leftPos + panelWidth - MARGIN
+                && mouseY >= detailY && mouseY < detailAreaBottom()) {
+            detailScroll = Math.max(0, detailScroll - (int) Math.round(scrollY * LINE_HEIGHT * 2));
+            return true;
+        }
+        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+    }
+
+    /**
+     * Draws the selected quest in three parts: a fixed header (icon, title, state), a scrollable
+     * middle (limits, description, prerequisites, objectives) and a fixed footer with the rewards,
+     * so a long objective list can never push the rewards or run under the action buttons.
+     */
+    private void renderQuestDetail(GuiGraphicsExtractor graphics, Quest quest, int x, int y, int fullWidth) {
         QuestState state = cache.getState(quest.id());
         QuestProgress progress = cache.getProgress(quest.id());
+        int width = fullWidth - SCROLLBAR_WIDTH;
+        int areaBottom = detailAreaBottom();
 
+        clipTop = y;
+        clipBottom = areaBottom;
         graphics.item(quest.icon(), x, y);
         int titleTextWidth = width - 22;
-        int cursorY = drawWrapped(graphics, quest.title(), x + 22, y + 1, titleTextWidth, 0xFFFFFF55);
-        cursorY = Math.max(cursorY, y + 12);
-        cursorY = drawWrapped(graphics, QuestGuiText.stateLabel(quest, state), x + 22, cursorY, titleTextWidth, QuestGuiText.stateColor(state));
-        cursorY += 2;
+        int headerY = drawWrapped(graphics, quest.title(), x + 22, y + 1, titleTextWidth, 0xFFFFFF55);
+        headerY = Math.max(headerY, y + 12);
+        headerY = drawWrapped(graphics, QuestGuiText.stateLabel(quest, state), x + 22, headerY, titleTextWidth, QuestGuiText.stateColor(state));
+        headerY += 2;
+
+        // The rewards get the bottom of the area (at most half of what is left under the header);
+        // the scrollable middle gets everything between the header and the rewards.
+        int footerHeight = Math.min(rewardsHeight(quest, width), Math.max(0, (areaBottom - headerY) / 2));
+        int footerTop = areaBottom - footerHeight;
+        int viewTop = headerY;
+        int viewBottom = footerTop - 4;
+        int viewHeight = Math.max(0, viewBottom - viewTop);
+        detailScroll = Math.max(0, Math.min(detailScroll, detailContentHeight - viewHeight));
+
+        clipTop = viewTop;
+        clipBottom = viewBottom;
+        int contentStart = viewTop - detailScroll;
+        int cursorY = contentStart;
 
         QuestFailureRules failureRules = quest.failure().orElse(null);
         if (failureRules != null) {
@@ -383,56 +478,48 @@ public final class QuestScreen extends Screen {
         }
 
         cursorY = drawWrapped(graphics, Component.translatable("questapi.gui.objectives"), x, cursorY, width, 0xFF55FFFF);
-        List<ObjectiveDefinition> objectives = quest.objectives();
-        for (int i = 0; i < objectives.size(); i++) {
-            if (!progress.objectiveUnlocked(quest, i)) {
-                cursorY = drawWrapped(graphics, Component.translatable("questapi.gui.objective.hidden"), x, cursorY, width, 0xFF777777);
-                cursorY += PROGRESS_BAR_HEIGHT + 2;
+        List<ObjectiveEntry> entries = quest.objectiveEntries();
+        for (int entryIndex = 0; entryIndex < entries.size(); entryIndex++) {
+            ObjectiveEntry entry = entries.get(entryIndex);
+            int first = quest.firstObjectiveOf(entryIndex);
+            if (!progress.objectiveUnlocked(quest, first)) {
+                // Optional entries of a step that has not opened are not drawn at all, so they
+                // can't hint at what is coming.
+                if (!entry.optional()) {
+                    cursorY = drawWrapped(graphics, Component.translatable("questapi.gui.objective.hidden"), x, cursorY, width, 0xFF777777);
+                    cursorY += PROGRESS_BAR_HEIGHT + 2;
+                }
                 continue;
             }
-            ObjectiveDefinition objective = objectives.get(i);
-            ObjectiveProgress op = progress.objectives().getOrDefault(i, ObjectiveProgress.empty());
-            String amountText = " (" + op.current() + "/" + objective.targetAmount() + ")";
-            int color = op.complete() ? 0xFF55FF55 : 0xFFDDDDDD;
-            boolean deliverable = objective instanceof DeliverItemObjective && state == QuestState.ACTIVE && !op.complete()
-                    && cache.manualActions().deliver();
-            int lineWidth = width;
-            int deliverButtonWidth = 0;
-            Component deliverLabel = null;
-            if (deliverable) {
-                deliverLabel = Component.translatable("questapi.gui.action.deliver");
-                deliverButtonWidth = font.width(deliverLabel) + 8;
-                lineWidth = Math.max(20, width - deliverButtonWidth - 4);
+            if (!entry.isGroup()) {
+                cursorY = drawObjective(graphics, quest, progress, state, first, x, cursorY, width, entry.optional());
+                continue;
             }
-            Component objectiveLine = objective.describe().copy().append(Component.literal(amountText));
-            int lineStartY = cursorY;
-            cursorY = drawWrapped(graphics, objectiveLine, x, cursorY, lineWidth, color);
-
-            int target = objective.targetAmount();
-            float ratio = target > 0 ? Math.min(1f, (float) op.current() / target) : 0f;
-            int filledWidth = Math.round(width * ratio);
-            int barColor = op.complete() ? 0xFF55FF55 : 0xFF55FFFF;
-            graphics.fill(x, cursorY, x + width, cursorY + PROGRESS_BAR_HEIGHT, 0x60000000);
-            if (filledWidth > 0) {
-                graphics.fill(x, cursorY, x + filledWidth, cursorY + PROGRESS_BAR_HEIGHT, barColor);
+            Component header = entry.required() == 1
+                    ? Component.translatable("questapi.gui.objective.choose_one")
+                    : Component.translatable("questapi.gui.objective.choose_n", entry.required());
+            if (entry.optional()) {
+                header = header.copy().append(Component.literal(" ")).append(Component.translatable("questapi.gui.objective.optional"));
             }
-            cursorY += PROGRESS_BAR_HEIGHT + 2;
-
-            if (deliverable) {
-                int bx = x + width - deliverButtonWidth;
-                int by = lineStartY;
-                boolean hovered = lastMouseX >= bx && lastMouseX < bx + deliverButtonWidth && lastMouseY >= by && lastMouseY < by + LINE_HEIGHT;
-                graphics.fill(bx, by, x + width, by + LINE_HEIGHT, hovered ? 0xA000CC00 : 0x8000AA00);
-                graphics.text(font, deliverLabel, bx + 4, by + 1, 0xFFFFFFFF);
-                deliverButtons.add(new DeliverButtonBounds(i, bx, by, deliverButtonWidth, LINE_HEIGHT));
-                if (hovered) {
-                    int remaining = objective.targetAmount() - op.current();
-                    graphics.setTooltipForNextFrame(font, Component.translatable("questapi.gui.action.deliver.tooltip", remaining), lastMouseX, lastMouseY);
-                }
+            cursorY = drawWrapped(graphics, header, x, cursorY, width, progress.entryComplete(quest, entryIndex) ? 0xFF55FF55 : 0xFFAAAAAA);
+            for (int option = 0; option < entry.options().size(); option++) {
+                cursorY = drawObjective(graphics, quest, progress, state, first + option, x + GROUP_INDENT, cursorY, width - GROUP_INDENT, false);
             }
         }
-        cursorY += 4;
+        detailContentHeight = cursorY - contentStart;
 
+        if (detailContentHeight > viewHeight && viewHeight > 0) {
+            int barX = x + fullWidth - 3;
+            int thumbHeight = Math.max(8, viewHeight * viewHeight / detailContentHeight);
+            int thumbY = viewTop + (viewHeight - thumbHeight) * detailScroll / (detailContentHeight - viewHeight);
+            graphics.fill(barX, viewTop, barX + 2, viewBottom, 0x40FFFFFF);
+            graphics.fill(barX, thumbY, barX + 2, thumbY + thumbHeight, 0xFFAAAAAA);
+        }
+
+        clipTop = footerTop;
+        clipBottom = areaBottom;
+        graphics.fill(x, footerTop - 3, x + fullWidth, footerTop - 2, 0x40FFFFFF);
+        cursorY = footerTop;
         cursorY = drawWrapped(graphics, Component.translatable("questapi.gui.rewards"), x, cursorY, width, 0xFFFFAA00);
         for (QuestReward reward : quest.rewards()) {
             cursorY = drawWrapped(graphics, Component.literal("- ").append(reward.describe()), x, cursorY, width, 0xFFDDDDDD);
@@ -446,6 +533,65 @@ public final class QuestScreen extends Screen {
                 cursorY = drawWrapped(graphics, Component.literal("- ").append(reward.describe()), x, cursorY, width, 0xFFDDDDDD);
             }
         }
+        clipTop = Integer.MIN_VALUE;
+        clipBottom = Integer.MAX_VALUE;
+    }
+
+    /**
+     * Draws one objective line with its progress bar (and its deliver button, if it has one) and
+     * returns the new cursor Y. An unfinished option of a group that is already satisfied is
+     * greyed out, because it no longer counts.
+     */
+    private int drawObjective(GuiGraphicsExtractor graphics, Quest quest, QuestProgress progress, QuestState state,
+                              int index, int x, int y, int width, boolean optionalTag) {
+        ObjectiveDefinition objective = quest.objectives().get(index);
+        ObjectiveProgress op = progress.objectives().getOrDefault(index, ObjectiveProgress.empty());
+        boolean passedOver = progress.objectiveFrozen(quest, index);
+        String amountText = " (" + op.current() + "/" + objective.targetAmount() + ")";
+        int color = op.complete() ? 0xFF55FF55 : passedOver ? 0xFF666666 : 0xFFDDDDDD;
+        boolean deliverable = objective instanceof DeliverItemObjective && state == QuestState.ACTIVE && !op.complete()
+                && !passedOver && cache.manualActions().deliver();
+        int lineWidth = width;
+        int deliverButtonWidth = 0;
+        Component deliverLabel = null;
+        if (deliverable) {
+            deliverLabel = Component.translatable("questapi.gui.action.deliver");
+            deliverButtonWidth = font.width(deliverLabel) + 8;
+            lineWidth = Math.max(20, width - deliverButtonWidth - 4);
+        }
+        MutableComponent objectiveLine = optionalTag
+                ? Component.translatable("questapi.gui.objective.optional").append(Component.literal(" "))
+                : Component.empty();
+        objectiveLine.append(objective.describe()).append(Component.literal(amountText));
+        int cursorY = y;
+        int lineStartY = cursorY;
+        cursorY = drawWrapped(graphics, objectiveLine, x, cursorY, lineWidth, color);
+
+        int target = objective.targetAmount();
+        float ratio = target > 0 ? Math.min(1f, (float) op.current() / target) : 0f;
+        int filledWidth = Math.round(width * ratio);
+        int barColor = op.complete() ? 0xFF55FF55 : passedOver ? 0xFF555555 : 0xFF55FFFF;
+        if (isVisible(cursorY, PROGRESS_BAR_HEIGHT)) {
+            graphics.fill(x, cursorY, x + width, cursorY + PROGRESS_BAR_HEIGHT, 0x60000000);
+            if (filledWidth > 0) {
+                graphics.fill(x, cursorY, x + filledWidth, cursorY + PROGRESS_BAR_HEIGHT, barColor);
+            }
+        }
+        cursorY += PROGRESS_BAR_HEIGHT + 2;
+
+        if (deliverable && isVisible(lineStartY, LINE_HEIGHT)) {
+            int bx = x + width - deliverButtonWidth;
+            int by = lineStartY;
+            boolean hovered = lastMouseX >= bx && lastMouseX < bx + deliverButtonWidth && lastMouseY >= by && lastMouseY < by + LINE_HEIGHT;
+            graphics.fill(bx, by, x + width, by + LINE_HEIGHT, hovered ? 0xA000CC00 : 0x8000AA00);
+            graphics.text(font, deliverLabel, bx + 4, by + 1, 0xFFFFFFFF);
+            deliverButtons.add(new DeliverButtonBounds(index, bx, by, deliverButtonWidth, LINE_HEIGHT));
+            if (hovered) {
+                int remaining = objective.targetAmount() - op.current();
+                graphics.setTooltipForNextFrame(font, Component.translatable("questapi.gui.action.deliver.tooltip", remaining), lastMouseX, lastMouseY);
+            }
+        }
+        return cursorY;
     }
 
     private record DeliverButtonBounds(int objectiveIndex, int x, int y, int width, int height) {

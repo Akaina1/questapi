@@ -1,5 +1,6 @@
 package com.ryankshah.questapi.client.gui;
 
+import com.ryankshah.questapi.api.quest.ObjectiveEntry;
 import com.ryankshah.questapi.api.quest.Quest;
 import com.ryankshah.questapi.api.quest.QuestProgress;
 import com.ryankshah.questapi.api.quest.QuestState;
@@ -11,6 +12,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.FormattedCharSequence;
 
@@ -31,6 +33,7 @@ public final class QuestTrackerHud {
     private static final int MARGIN = 4;
     private static final int LINE_HEIGHT = 10;
     private static final int BAR_HEIGHT = 3;
+    private static final int GROUP_INDENT = 8;
     private static final int WIDTH = 140;
     private static final int BLOCK_GAP = 8;
     private static final float HUD_SCALE = 0.75f;
@@ -78,24 +81,35 @@ public final class QuestTrackerHud {
         List<FormattedCharSequence> timeLines = remainingTicks.isPresent()
                 ? font.split(QuestGuiText.timeRemainingLabel(quest, remainingTicks.getAsLong(), cache.ticksPerGameDay()), WIDTH)
                 : List.of();
-        List<List<FormattedCharSequence>> objectiveLines = new ArrayList<>();
-        List<Integer> shownObjectives = new ArrayList<>();
-        List<ObjectiveDefinition> objectives = quest.objectives();
-        for (int i = 0; i < objectives.size(); i++) {
-            if (!progress.objectiveUnlocked(quest, i)) {
+        List<Row> rows = new ArrayList<>();
+        List<ObjectiveEntry> entries = quest.objectiveEntries();
+        for (int entryIndex = 0; entryIndex < entries.size(); entryIndex++) {
+            ObjectiveEntry entry = entries.get(entryIndex);
+            int first = quest.firstObjectiveOf(entryIndex);
+            if (!progress.objectiveUnlocked(quest, first)) {
+                // Entries are ordered by step, so everything from here on is not open yet.
                 break;
             }
-            ObjectiveDefinition objective = objectives.get(i);
-            ObjectiveProgress op = progress.objectives().getOrDefault(i, ObjectiveProgress.empty());
-            String amountText = " (" + op.current() + "/" + objective.targetAmount() + ")";
-            Component line = objective.describe().copy().append(Component.literal(amountText));
-            objectiveLines.add(font.split(line, WIDTH));
-            shownObjectives.add(i);
+            if (!entry.isGroup()) {
+                rows.add(objectiveRow(font, quest, progress, first, 0, entry.optional()));
+                continue;
+            }
+            Component header = entry.required() == 1
+                    ? Component.translatable("questapi.gui.objective.choose_one")
+                    : Component.translatable("questapi.gui.objective.choose_n", entry.required());
+            if (entry.optional()) {
+                header = header.copy().append(Component.literal(" ")).append(Component.translatable("questapi.gui.objective.optional"));
+            }
+            rows.add(new Row(-1, 0, font.split(header, WIDTH),
+                    progress.entryComplete(quest, entryIndex) ? 0xFF55FF55 : 0xFFAAAAAA));
+            for (int option = 0; option < entry.options().size(); option++) {
+                rows.add(objectiveRow(font, quest, progress, first + option, GROUP_INDENT, false));
+            }
         }
 
         int contentHeight = titleLines.size() * LINE_HEIGHT + timeLines.size() * LINE_HEIGHT + 2;
-        for (List<FormattedCharSequence> lines : objectiveLines) {
-            contentHeight += lines.size() * LINE_HEIGHT + BAR_HEIGHT + 2;
+        for (Row row : rows) {
+            contentHeight += row.lines().size() * LINE_HEIGHT + (row.isHeader() ? 0 : BAR_HEIGHT + 2);
         }
 
         graphics.fill(x - 4, y - 3, x + WIDTH + 4, y + contentHeight + 3, 0x90202020);
@@ -111,25 +125,50 @@ public final class QuestTrackerHud {
         }
         cursorY += 2;
 
-        for (int shown = 0; shown < shownObjectives.size(); shown++) {
-            int i = shownObjectives.get(shown);
-            ObjectiveDefinition objective = objectives.get(i);
-            ObjectiveProgress op = progress.objectives().getOrDefault(i, ObjectiveProgress.empty());
-            int color = op.complete() ? 0xFF55FF55 : 0xFFDDDDDD;
-            for (FormattedCharSequence line : objectiveLines.get(shown)) {
-                graphics.text(font, line, x, cursorY, color);
+        for (Row row : rows) {
+            int rowX = x + row.indent();
+            int rowWidth = WIDTH - row.indent();
+            for (FormattedCharSequence line : row.lines()) {
+                graphics.text(font, line, rowX, cursorY, row.color());
                 cursorY += LINE_HEIGHT;
             }
+            if (row.isHeader()) {
+                continue;
+            }
 
+            ObjectiveDefinition objective = quest.objectives().get(row.objectiveIndex());
+            ObjectiveProgress op = progress.objectives().getOrDefault(row.objectiveIndex(), ObjectiveProgress.empty());
             int target = objective.targetAmount();
             float ratio = target > 0 ? Math.min(1f, (float) op.current() / target) : 0f;
-            int filledWidth = Math.round(WIDTH * ratio);
-            graphics.fill(x, cursorY, x + WIDTH, cursorY + BAR_HEIGHT, 0x60000000);
+            int filledWidth = Math.round(rowWidth * ratio);
+            graphics.fill(rowX, cursorY, rowX + rowWidth, cursorY + BAR_HEIGHT, 0x60000000);
             if (filledWidth > 0) {
-                graphics.fill(x, cursorY, x + filledWidth, cursorY + BAR_HEIGHT, op.complete() ? 0xFF55FF55 : 0xFF55FFFF);
+                int barColor = op.complete() ? 0xFF55FF55 : progress.objectiveFrozen(quest, row.objectiveIndex()) ? 0xFF555555 : 0xFF55FFFF;
+                graphics.fill(rowX, cursorY, rowX + filledWidth, cursorY + BAR_HEIGHT, barColor);
             }
             cursorY += BAR_HEIGHT + 2;
         }
         return cursorY;
+    }
+
+    /**
+     * One drawn block: a group header ({@code objectiveIndex} -1, no bar) or one objective with its
+     * progress bar. Unfinished options of a group that is already done are greyed out.
+     */
+    private record Row(int objectiveIndex, int indent, List<FormattedCharSequence> lines, int color) {
+        boolean isHeader() {
+            return objectiveIndex < 0;
+        }
+    }
+
+    private static Row objectiveRow(Font font, Quest quest, QuestProgress progress, int index, int indent, boolean optionalTag) {
+        ObjectiveDefinition objective = quest.objectives().get(index);
+        ObjectiveProgress op = progress.objectives().getOrDefault(index, ObjectiveProgress.empty());
+        MutableComponent line = optionalTag
+                ? Component.translatable("questapi.gui.objective.optional").append(Component.literal(" "))
+                : Component.empty();
+        line.append(objective.describe()).append(Component.literal(" (" + op.current() + "/" + objective.targetAmount() + ")"));
+        int color = op.complete() ? 0xFF55FF55 : progress.objectiveFrozen(quest, index) ? 0xFF666666 : 0xFFDDDDDD;
+        return new Row(index, indent, font.split(line, WIDTH - indent), color);
     }
 }

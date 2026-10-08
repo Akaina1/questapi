@@ -702,7 +702,7 @@ public final class QuestManagerImpl implements QuestManager {
         if (objectiveIndex < 0 || objectiveIndex >= objectives.size()) {
             return false;
         }
-        if (!progress.objectiveUnlocked(quest, objectiveIndex)) {
+        if (!progress.objectiveOpen(quest, objectiveIndex)) {
             return false;
         }
         ObjectiveDefinition definition = objectives.get(objectiveIndex);
@@ -956,6 +956,9 @@ public final class QuestManagerImpl implements QuestManager {
                 if (!progress.objectiveUnlocked(quest, i)) {
                     break;
                 }
+                if (progress.objectiveFrozen(quest, i)) {
+                    continue;
+                }
                 ObjectiveDefinition definition = objectives.get(i);
                 ObjectiveProgress op = progress.objective(i);
                 int previous = op.current();
@@ -989,11 +992,8 @@ public final class QuestManagerImpl implements QuestManager {
         if (progress.state() != QuestState.ACTIVE) {
             return false;
         }
-        List<ObjectiveDefinition> objectives = quest.objectives();
-        for (int i = 0; i < objectives.size(); i++) {
-            if (!progress.objective(i).complete()) {
-                return false;
-            }
+        if (!progress.objectivesMet(quest)) {
+            return false;
         }
         progress.setState(QuestState.COMPLETED);
         progress.setCompletedAt(System.currentTimeMillis());

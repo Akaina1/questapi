@@ -1,11 +1,14 @@
 package com.ryankshah.questapi.impl.network;
 
+import com.mojang.datafixers.util.Pair;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
+import com.mojang.serialization.DynamicOps;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.ryankshah.questapi.api.QuestRegistry;
 import com.ryankshah.questapi.api.quest.FailTrigger;
+import com.ryankshah.questapi.api.quest.ObjectiveEntry;
 import com.ryankshah.questapi.api.quest.Quest;
 import com.ryankshah.questapi.api.quest.QuestDisplay;
 import com.ryankshah.questapi.api.quest.QuestFailureRules;
@@ -48,7 +51,64 @@ public final class QuestCodecs {
         return Identifier.CODEC.dispatch("type", ObjectiveDefinition::typeId, id -> lookupObjective(registry, id));
     }
 
+    /**
+     * The {@code type} of a JSON entry that is a group of options instead of a single objective.
+     */
+    public static final Identifier ANY_OF = Identifier.fromNamespaceAndPath("questapi", "any_of");
+
+    private record RawGroup(List<ObjectiveDefinition> options, int count, boolean optional) {
+    }
+
+    /**
+     * Reads one entry of a quest's objective list. A group is
+     * {@code {"type": "questapi:any_of", "count": 1, "optional": false, "options": [...]}}; anything
+     * else is a single objective, which may carry {@code "optional": true} next to its own fields.
+     * The same codec writes the entry back for the client sync, so both shapes round-trip.
+     */
+    public static Codec<ObjectiveEntry> entryCodec(QuestRegistry registry) {
+        MapCodec<ObjectiveEntry> single = RecordCodecBuilder.<ObjectiveEntry>mapCodec(instance -> instance.group(
+                Identifier.CODEC.<ObjectiveDefinition>dispatchMap("type", ObjectiveDefinition::typeId, id -> lookupObjective(registry, id))
+                        .forGetter((ObjectiveEntry entry) -> entry.options().get(0)),
+                Codec.BOOL.optionalFieldOf("optional", false).forGetter(ObjectiveEntry::optional)
+        ).apply(instance, ObjectiveEntry::single));
+        Codec<ObjectiveEntry> group = RecordCodecBuilder.<RawGroup>mapCodec(instance -> instance.group(
+                Identifier.CODEC.fieldOf("type").forGetter(raw -> ANY_OF),
+                objectiveCodec(registry).listOf().fieldOf("options").forGetter(RawGroup::options),
+                Codec.intRange(1, Integer.MAX_VALUE).optionalFieldOf("count", 1).forGetter(RawGroup::count),
+                Codec.BOOL.optionalFieldOf("optional", false).forGetter(RawGroup::optional)
+        ).apply(instance, (type, options, count, optional) -> new RawGroup(options, count, optional))).<ObjectiveEntry>flatXmap(raw -> {
+            if (raw.options().size() < 2) {
+                return DataResult.error(() -> "A questapi:any_of group needs at least 2 options");
+            }
+            if (raw.count() > raw.options().size()) {
+                return DataResult.error(() -> "A questapi:any_of group has count " + raw.count()
+                        + " but only " + raw.options().size() + " options");
+            }
+            return DataResult.success(new ObjectiveEntry(raw.options(), raw.count(), raw.optional()));
+        }, entry -> DataResult.success(new RawGroup(entry.options(), entry.required(), entry.optional()))).codec();
+        Codec<ObjectiveEntry> singleCodec = single.codec();
+        return new Codec<>() {
+            @Override
+            public <T> DataResult<Pair<ObjectiveEntry, T>> decode(DynamicOps<T> ops, T input) {
+                boolean isGroup = ops.getMap(input).result()
+                        .map(map -> map.get("type"))
+                        .flatMap(type -> ops.getStringValue(type).result())
+                        .map(name -> name.equals(ANY_OF.toString()))
+                        .orElse(false);
+                return (isGroup ? group : singleCodec).decode(ops, input);
+            }
+
+            @Override
+            public <T> DataResult<T> encode(ObjectiveEntry entry, DynamicOps<T> ops, T prefix) {
+                return (entry.isGroup() ? group : singleCodec).encode(entry, ops, prefix);
+            }
+        };
+    }
+
     private static MapCodec<? extends ObjectiveDefinition> lookupObjective(QuestRegistry registry, Identifier id) {
+        if (id.equals(ANY_OF)) {
+            throw new IllegalArgumentException("A questapi:any_of group can't be placed inside another group");
+        }
         ObjectiveType<?> type = registry.getObjectiveType(id)
                 .orElseThrow(() -> new IllegalArgumentException("Unknown objective type: " + id));
         return type.codec();
@@ -150,7 +210,7 @@ public final class QuestCodecs {
                 Identifier.CODEC.fieldOf("category").forGetter(Quest::categoryId),
                 displayCodec().fieldOf("display").forGetter(Quest::display),
                 lifecycleCodec().optionalFieldOf("lifecycle", defaultLifecycle).forGetter(Quest::lifecycle),
-                objectiveCodec(registry).listOf().fieldOf("objectives").forGetter(Quest::objectives),
+                entryCodec(registry).listOf().fieldOf("objectives").forGetter(Quest::objectiveEntries),
                 rewardCodec(registry).listOf().optionalFieldOf("rewards", List.of()).forGetter(Quest::rewards),
                 conditionCodec(registry).listOf().optionalFieldOf("prerequisites", List.of()).forGetter(Quest::prerequisites),
                 failureCodec(registry).optionalFieldOf("failure").forGetter(Quest::failure),
@@ -167,7 +227,7 @@ public final class QuestCodecs {
                     .sortOrder(display.sortOrder())
                     .autoActivate(lifecycle.autoActivate())
                     .sequential(lifecycle.sequential())
-                    .objectives(objectives)
+                    .objectiveEntries(objectives)
                     .rewards(rewards)
                     .requires(prerequisites);
             lifecycle.repeat().ifPresent(repeat -> builder.repeatable(repeat.resetMode(), repeat.amount()));

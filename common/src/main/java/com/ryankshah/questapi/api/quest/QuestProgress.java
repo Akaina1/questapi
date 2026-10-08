@@ -5,6 +5,7 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.ryankshah.questapi.api.quest.objective.ObjectiveProgress;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -72,22 +73,78 @@ public final class QuestProgress {
         return objectives.computeIfAbsent(index, i -> ObjectiveProgress.empty());
     }
 
+    private boolean objectiveComplete(int index) {
+        ObjectiveProgress progress = objectives.get(index);
+        return progress != null && progress.complete();
+    }
+
     /**
-     * Whether objective {@code index} is currently open for progress. Always {@code true} unless the
-     * quest is {@link Quest#sequential()}, in which case every earlier objective must be complete.
-     * Read-only, so it is safe to call from the client GUI as well as the server.
+     * Whether an entry of the quest's objective list is done: a single objective is complete, or a
+     * group has at least its required number of options complete. Read-only, so it is safe to call
+     * from the client GUI as well as the server.
+     */
+    public boolean entryComplete(Quest quest, int entryIndex) {
+        ObjectiveEntry entry = quest.objectiveEntries().get(entryIndex);
+        int first = quest.firstObjectiveOf(entryIndex);
+        int done = 0;
+        for (int i = 0; i < entry.options().size(); i++) {
+            if (objectiveComplete(first + i)) {
+                done++;
+            }
+        }
+        return done >= entry.required();
+    }
+
+    /**
+     * Whether every entry that is not optional is done, which is what completes the quest.
+     */
+    public boolean objectivesMet(Quest quest) {
+        List<ObjectiveEntry> entries = quest.objectiveEntries();
+        for (int i = 0; i < entries.size(); i++) {
+            if (!entries.get(i).optional() && !entryComplete(quest, i)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Whether objective {@code index} has reached its step. Always {@code true} unless the quest is
+     * {@link Quest#sequential()}, in which case the required entries of every earlier step must be
+     * done. Everything in one step opens together, and optional entries stay open until the quest
+     * completes. Read-only, so it is safe to call from the client GUI as well as the server.
      */
     public boolean objectiveUnlocked(Quest quest, int index) {
         if (!quest.sequential()) {
             return true;
         }
-        for (int i = 0; i < index; i++) {
-            ObjectiveProgress previous = objectives.get(i);
-            if (previous == null || !previous.complete()) {
+        int step = quest.stepOfObjective(index);
+        List<ObjectiveEntry> entries = quest.objectiveEntries();
+        for (int i = 0; i < entries.size(); i++) {
+            if (!entries.get(i).optional() && quest.stepOf(i) < step && !entryComplete(quest, i)) {
                 return false;
             }
         }
         return true;
+    }
+
+    /**
+     * Whether a group has already been satisfied and this option was left unfinished. Such an
+     * option no longer progresses and is shown as passed over.
+     */
+    public boolean objectiveFrozen(Quest quest, int index) {
+        int entryIndex = quest.entryOf(index);
+        return quest.objectiveEntries().get(entryIndex).isGroup()
+                && !objectiveComplete(index)
+                && entryComplete(quest, entryIndex);
+    }
+
+    /**
+     * Whether objective {@code index} can currently make progress: its step is reached and it is
+     * not an unfinished option of a group that is already done.
+     */
+    public boolean objectiveOpen(Quest quest, int index) {
+        return objectiveUnlocked(quest, index) && !objectiveFrozen(quest, index);
     }
 
     public long startedAt() {

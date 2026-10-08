@@ -6,7 +6,6 @@ import com.ryankshah.questapi.api.quest.PlayerQuestData;
 import com.ryankshah.questapi.api.quest.Quest;
 import com.ryankshah.questapi.api.quest.QuestProgress;
 import com.ryankshah.questapi.api.quest.QuestToastOverrides;
-import com.ryankshah.questapi.api.quest.objective.ObjectiveProgress;
 import com.ryankshah.questapi.impl.DevConfig;
 import com.ryankshah.questapi.impl.network.payload.ClientboundChapterEndingPayload;
 import com.ryankshah.questapi.impl.network.payload.ClientboundObjectiveCompletedPayload;
@@ -143,14 +142,7 @@ public final class QuestNetworking {
     }
 
     private static boolean allObjectivesComplete(ServerPlayer player, Quest quest) {
-        QuestProgress progress = QuestApi.manager().getProgress(player, quest.id());
-        for (int i = 0; i < quest.objectives().size(); i++) {
-            ObjectiveProgress objective = progress.objectives().get(i);
-            if (objective == null || !objective.complete()) {
-                return false;
-            }
-        }
-        return true;
+        return QuestApi.manager().getProgress(player, quest.id()).objectivesMet(quest);
     }
 
     public static void sendQuestRewarded(ServerPlayer player, Quest quest) {

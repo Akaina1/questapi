@@ -291,9 +291,16 @@ public final class QuestDataLoader extends SimplePreparableReloadListener<QuestD
             if (!devMode && file.getNamespace().equals(ExampleQuests.MOD)) {
                 continue;
             }
-            codec.parse(JsonOps.INSTANCE, entry.getValue())
-                    .ifSuccess(quest -> result.put(quest.id(), quest))
-                    .ifError(error -> QuestApi.LOG.error("Couldn't parse quest file '{}': {}", file, error));
+            try {
+                codec.parse(JsonOps.INSTANCE, entry.getValue())
+                        .ifSuccess(quest -> result.put(quest.id(), quest))
+                        .ifError(error -> QuestApi.LOG.error("Couldn't parse quest file '{}': {}", file, error));
+            } catch (RuntimeException e) {
+                // A quest the builder rejects (no objectives, nothing but optional objectives, a
+                // group nested in a group) is skipped with a clear message instead of failing the
+                // whole reload.
+                QuestApi.LOG.error("Couldn't load quest file '{}': {}", file, e.getMessage());
+            }
         }
         return result;
     }

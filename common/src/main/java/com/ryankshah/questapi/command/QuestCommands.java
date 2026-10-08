@@ -111,14 +111,7 @@ public final class QuestCommands {
         ObjectiveDefinition definition = objectives.get(objectiveIndex);
         ObjectiveProgress op = progress.objective(objectiveIndex);
         op.updateCurrent(op.current() + amount, definition.targetAmount());
-        boolean allComplete = true;
-        for (int i = 0; i < objectives.size(); i++) {
-            if (!progress.objective(i).complete()) {
-                allComplete = false;
-                break;
-            }
-        }
-        if (allComplete) {
+        if (progress.objectivesMet(quest)) {
             progress.setState(QuestState.COMPLETED);
             progress.setCompletedAt(System.currentTimeMillis());
         }

@@ -22,7 +22,11 @@ public final class Quest {
     private final Identifier categoryId;
     private final QuestDisplay display;
     private final QuestLifecycle lifecycle;
+    private final List<ObjectiveEntry> entries;
     private final List<ObjectiveDefinition> objectives;
+    private final int[] entryOfObjective;
+    private final int[] firstObjectiveOfEntry;
+    private final int[] stepOfEntry;
     private final List<QuestReward> rewards;
     private final List<QuestCondition> prerequisites;
     private final Optional<QuestFailureRules> failure;
@@ -40,7 +44,32 @@ public final class Quest {
         this.display = new QuestDisplay(builder.title, builder.description, builder.icon, builder.sortOrder);
         this.lifecycle = new QuestLifecycle(builder.autoActivate, builder.sequential,
                 builder.repeatable ? Optional.of(new QuestRepeat(builder.resetMode, builder.resetAmount)) : Optional.empty());
-        this.objectives = List.copyOf(builder.objectives);
+        this.entries = List.copyOf(builder.entries);
+        List<ObjectiveDefinition> flat = new java.util.ArrayList<>();
+        this.firstObjectiveOfEntry = new int[entries.size()];
+        this.stepOfEntry = new int[entries.size()];
+        int step = 0;
+        boolean seenRequired = false;
+        List<Integer> owners = new java.util.ArrayList<>();
+        for (int entryIndex = 0; entryIndex < entries.size(); entryIndex++) {
+            ObjectiveEntry entry = entries.get(entryIndex);
+            firstObjectiveOfEntry[entryIndex] = flat.size();
+            for (ObjectiveDefinition option : entry.options()) {
+                flat.add(option);
+                owners.add(entryIndex);
+            }
+            // An optional entry shares the step of the required entry written before it, or the
+            // first step when it is written before any required entry.
+            if (!entry.optional()) {
+                if (seenRequired) {
+                    step++;
+                }
+                seenRequired = true;
+            }
+            stepOfEntry[entryIndex] = step;
+        }
+        this.objectives = List.copyOf(flat);
+        this.entryOfObjective = owners.stream().mapToInt(Integer::intValue).toArray();
         this.rewards = List.copyOf(builder.rewards);
         this.prerequisites = List.copyOf(builder.prerequisites);
         this.failure = Optional.ofNullable(builder.failure);
@@ -123,8 +152,49 @@ public final class Quest {
         return chapterFinal;
     }
 
+    /**
+     * Every objective in a flat list, the options of a group one after another. Saved progress and
+     * objective indexes everywhere (delivery, {@code fail_on} steps) refer to positions in this list.
+     */
     public List<ObjectiveDefinition> objectives() {
         return objectives;
+    }
+
+    /**
+     * The objective list as written: single objectives and groups, each possibly optional.
+     */
+    public List<ObjectiveEntry> objectiveEntries() {
+        return entries;
+    }
+
+    /**
+     * The entry that the objective at flat position {@code objectiveIndex} belongs to.
+     */
+    public int entryOf(int objectiveIndex) {
+        return entryOfObjective[objectiveIndex];
+    }
+
+    /**
+     * The flat position of the first objective of entry {@code entryIndex}.
+     */
+    public int firstObjectiveOf(int entryIndex) {
+        return firstObjectiveOfEntry[entryIndex];
+    }
+
+    /**
+     * The step of an entry: one step per required entry, counting from 0. Optional entries share
+     * the step of the required entry written before them (or the first step if none comes first).
+     * In a sequential quest a step opens when the required entries of all earlier steps are done.
+     */
+    public int stepOf(int entryIndex) {
+        return stepOfEntry[entryIndex];
+    }
+
+    /**
+     * The step of the objective at flat position {@code objectiveIndex}.
+     */
+    public int stepOfObjective(int objectiveIndex) {
+        return stepOfEntry[entryOfObjective[objectiveIndex]];
     }
 
     public List<QuestReward> rewards() {
@@ -207,7 +277,7 @@ public final class Quest {
         private Component description = Component.empty();
         private ItemStack icon = ItemStack.EMPTY;
         private Identifier categoryId;
-        private final List<ObjectiveDefinition> objectives = new java.util.ArrayList<>();
+        private final List<ObjectiveEntry> entries = new java.util.ArrayList<>();
         private final List<QuestReward> rewards = new java.util.ArrayList<>();
         private final List<QuestCondition> prerequisites = new java.util.ArrayList<>();
         private boolean autoActivate = false;
@@ -274,12 +344,53 @@ public final class Quest {
         }
 
         public Builder objective(ObjectiveDefinition objective) {
-            this.objectives.add(objective);
+            this.entries.add(ObjectiveEntry.single(objective, false));
             return this;
         }
 
         public Builder objectives(List<ObjectiveDefinition> objectives) {
-            this.objectives.addAll(objectives);
+            for (ObjectiveDefinition objective : objectives) {
+                objective(objective);
+            }
+            return this;
+        }
+
+        /**
+         * Adds an objective that the quest can complete without. In a sequential quest it opens
+         * together with the required objective written before it.
+         */
+        public Builder optionalObjective(ObjectiveDefinition objective) {
+            this.entries.add(ObjectiveEntry.single(objective, true));
+            return this;
+        }
+
+        /**
+         * Adds a required choice: the objective counts as done once {@code count} of the
+         * {@code options} are complete. Options left unfinished at that point stop progressing.
+         */
+        public Builder objectiveGroup(int count, List<ObjectiveDefinition> options) {
+            this.entries.add(new ObjectiveEntry(options, count, false));
+            return this;
+        }
+
+        /**
+         * Adds an optional choice, see {@link #objectiveGroup(int, List)} and {@link #optionalObjective}.
+         */
+        public Builder optionalObjectiveGroup(int count, List<ObjectiveDefinition> options) {
+            this.entries.add(new ObjectiveEntry(options, count, true));
+            return this;
+        }
+
+        /**
+         * Adds an entry that is already assembled, such as one read from a data file.
+         */
+        public Builder objectiveEntry(ObjectiveEntry entry) {
+            this.entries.add(entry);
+            return this;
+        }
+
+        public Builder objectiveEntries(List<ObjectiveEntry> entries) {
+            this.entries.addAll(entries);
             return this;
         }
 
@@ -363,8 +474,11 @@ public final class Quest {
             if (categoryId == null) {
                 throw new IllegalStateException("Quest " + id + " has no category assigned");
             }
-            if (objectives.isEmpty()) {
+            if (entries.isEmpty()) {
                 throw new IllegalStateException("Quest " + id + " has no objectives");
+            }
+            if (entries.stream().allMatch(ObjectiveEntry::optional)) {
+                throw new IllegalStateException("Quest " + id + " needs at least one objective that is not optional");
             }
             return new Quest(this);
         }
