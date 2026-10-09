@@ -7,6 +7,7 @@ import com.ryankshah.questapi.api.quest.QuestCategory;
 import com.ryankshah.questapi.api.quest.QuestFailureRules;
 import com.ryankshah.questapi.api.quest.QuestProgress;
 import com.ryankshah.questapi.api.quest.QuestState;
+import com.ryankshah.questapi.api.quest.RewardChoice;
 import com.ryankshah.questapi.api.quest.condition.QuestCondition;
 import com.ryankshah.questapi.api.quest.objective.ObjectiveDefinition;
 import com.ryankshah.questapi.api.quest.objective.ObjectiveProgress;
@@ -26,6 +27,7 @@ import net.minecraft.resources.Identifier;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.OptionalLong;
 
 /**
@@ -267,20 +269,6 @@ public final class QuestScreen extends Screen {
                                 b -> ClientQuestNetworking.requestToggleTrackQuest(selectedQuest.id()))
                         .bounds(detailX, trackY, detailWidth, 20).build();
             }
-            case COMPLETED -> {
-                if (allowed.claim()) {
-                    actionButton = Button.builder(Component.translatable("questapi.gui.action.claim"),
-                                    b -> ClientQuestNetworking.requestClaimReward(selectedQuest.id()))
-                            .bounds(detailX, buttonY, detailWidth, 20).build();
-                }
-            }
-            case FAILED -> {
-                if (allowed.claim() && cache.getProgress(selectedQuest.id()).claimable(selectedQuest)) {
-                    actionButton = Button.builder(Component.translatable("questapi.gui.action.claim"),
-                                    b -> ClientQuestNetworking.requestClaimReward(selectedQuest.id()))
-                            .bounds(detailX, buttonY, detailWidth, 20).build();
-                }
-            }
             default -> {
             }
         }
@@ -386,12 +374,56 @@ public final class QuestScreen extends Screen {
     }
 
     /**
-     * Height of the always-visible rewards block (rewards, plus failure rewards if the quest has any).
+     * What the book shows for a quest's reward choice: before the claim a read-only list with one
+     * line per choice, after it only the choice the player took. The player picks at the turn-in
+     * (an NPC or command), never in the book.
+     *
+     * @param header      the heading line
+     * @param headerColor its color
+     * @param lines       one line per choice, empty once a choice was taken
      */
-    private int rewardsHeight(Quest quest, int width) {
+    private record ChoiceBlock(Component header, int headerColor, List<Component> lines) {
+    }
+
+    private Optional<ChoiceBlock> choiceBlock(Quest quest, QuestState state, QuestProgress progress) {
+        if (quest.rewardChoices().isEmpty()) {
+            return Optional.empty();
+        }
+        if (state == QuestState.REWARDED) {
+            return progress.chosenReward()
+                    .flatMap(quest::rewardChoice)
+                    .map(choice -> new ChoiceBlock(
+                            Component.translatable("questapi.gui.reward_chosen", choice.label()), 0xFF55FF55, List.of()));
+        }
+        List<Component> lines = new ArrayList<>();
+        for (RewardChoice choice : quest.rewardChoices()) {
+            MutableComponent summary = Component.empty();
+            for (int i = 0; i < choice.rewards().size(); i++) {
+                if (i > 0) {
+                    summary.append(Component.literal(", "));
+                }
+                summary.append(choice.rewards().get(i).describe());
+            }
+            lines.add(Component.literal("- ").append(choice.label()).append(Component.literal(" (")).append(summary).append(Component.literal(")")));
+        }
+        return Optional.of(new ChoiceBlock(Component.translatable("questapi.gui.reward_choices"), 0xFFFFAA00, lines));
+    }
+
+    /**
+     * Height of the always-visible rewards block (rewards, the reward choice, plus failure rewards
+     * if the quest has any).
+     */
+    private int rewardsHeight(Quest quest, QuestState state, QuestProgress progress, int width) {
         int height = wrappedHeight(Component.translatable("questapi.gui.rewards"), width);
         for (QuestReward reward : quest.rewards()) {
             height += wrappedHeight(Component.literal("- ").append(reward.describe()), width);
+        }
+        Optional<ChoiceBlock> choices = choiceBlock(quest, state, progress);
+        if (choices.isPresent()) {
+            height += 4 + wrappedHeight(choices.get().header(), width);
+            for (Component line : choices.get().lines()) {
+                height += wrappedHeight(line, width);
+            }
         }
         List<QuestReward> failureRewards = quest.failureRewards();
         if (!failureRewards.isEmpty()) {
@@ -435,7 +467,7 @@ public final class QuestScreen extends Screen {
 
         // The rewards get the bottom of the area (at most half of what is left under the header);
         // the scrollable middle gets everything between the header and the rewards.
-        int footerHeight = Math.min(rewardsHeight(quest, width), Math.max(0, (areaBottom - headerY) / 2));
+        int footerHeight = Math.min(rewardsHeight(quest, state, progress, width), Math.max(0, (areaBottom - headerY) / 2));
         int footerTop = areaBottom - footerHeight;
         int viewTop = headerY;
         int viewBottom = footerTop - 4;
@@ -525,6 +557,15 @@ public final class QuestScreen extends Screen {
         cursorY = drawWrapped(graphics, Component.translatable("questapi.gui.rewards"), x, cursorY, width, 0xFFFFAA00);
         for (QuestReward reward : quest.rewards()) {
             cursorY = drawWrapped(graphics, Component.literal("- ").append(reward.describe()), x, cursorY, width, 0xFFDDDDDD);
+        }
+
+        Optional<ChoiceBlock> choices = choiceBlock(quest, state, progress);
+        if (choices.isPresent()) {
+            cursorY += 4;
+            cursorY = drawWrapped(graphics, choices.get().header(), x, cursorY, width, choices.get().headerColor());
+            for (Component line : choices.get().lines()) {
+                cursorY = drawWrapped(graphics, line, x, cursorY, width, 0xFFDDDDDD);
+            }
         }
 
         List<QuestReward> failureRewards = quest.failureRewards();

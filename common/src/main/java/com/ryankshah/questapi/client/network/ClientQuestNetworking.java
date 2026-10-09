@@ -4,7 +4,6 @@ import com.ryankshah.questapi.api.quest.PlayerQuestData;
 import com.ryankshah.questapi.client.ClientQuestDataCache;
 import com.ryankshah.questapi.impl.network.payload.ClientboundSyncDefinitionsPayload;
 import com.ryankshah.questapi.impl.network.payload.ServerboundAbandonQuestPayload;
-import com.ryankshah.questapi.impl.network.payload.ServerboundClaimRewardPayload;
 import com.ryankshah.questapi.impl.network.payload.ServerboundDeliverItemsPayload;
 import com.ryankshah.questapi.impl.network.payload.ServerboundRequestSyncPayload;
 import com.ryankshah.questapi.impl.network.payload.ServerboundStartQuestPayload;
@@ -106,10 +105,6 @@ public final class ClientQuestNetworking {
 
     public static void requestAbandonQuest(Identifier questId) {
         Services.NETWORK.sendToServer(new ServerboundAbandonQuestPayload(questId));
-    }
-
-    public static void requestClaimReward(Identifier questId) {
-        Services.NETWORK.sendToServer(new ServerboundClaimRewardPayload(questId));
     }
 
     public static void requestDeliverItems(Identifier questId, int objectiveIndex, int amount) {

@@ -14,7 +14,7 @@ neoforge/   - NeoForge entrypoints, networking registration, platform services
 ```
 
 All quest logic is **server-authoritative**. The client only ever displays what the server has sent
-it and asks the server to perform actions (start a quest, claim a reward, deliver items); it never
+it and asks the server to perform actions (start a quest, abandon it, deliver items); it never
 decides quest state on its own.
 
 ## Table of contents
@@ -200,21 +200,21 @@ A quest is made of nested blocks, each optional unless noted:
 - `lifecycle`: `auto_activate`, `sequential`, and `repeat` (`reset_mode` optional, `reset_amount`). A quest is repeatable exactly when `repeat` is present.
 - `failure`: `retryable`, `time_limit` (`amount` and `unit`: `GAME_DAYS`, `GAME_HOURS` or `REAL_SECONDS`), `reason`, `fail_on` (a list of `{ "event": "<event key>", "during_step": <index> }`) and `rewards` (same reward entries as the top-level `rewards`, claimed once after the quest failed; see below).
 - `toast_overrides`: `started`, `ready`, `completed` and `failed` replace the title line of the matching toast.
+- `reward_choices` (top-level, next to `rewards`): a list of `{ "id", "label", "rewards" }` entries; see "Reward choices" below.
 
 A retryable quest is reset straight back to its starting state when it fails; a non-retry quest stays
 `FAILED` permanently, and the `questapi:quest_failed` condition lets other quests depend on that.
 
 **Failure rewards:** `failure.rewards` takes exactly the same entries as `rewards` (any reward type,
-including third-party ones) and is claimed through the same `QuestManager#claimRewards` call (and the
-same claim packet) as a completed quest's rewards. They are not granted at the moment of failure,
+including third-party ones) and is claimed through the same `QuestManager#claimRewards` call as a
+completed quest's rewards. They are not granted at the moment of failure,
 because many failure triggers (such as `questapi:player_died`) fire while the player cannot receive
-items; the player or a mod claims them afterwards. The quest stays `FAILED` after claiming, so
+items; a mod claims them afterwards. The quest stays `FAILED` after claiming, so
 `quest_failed` prerequisites keep working, and `QuestProgress#failureRewardsClaimed()` stops a second
 claim. `QuestProgress#claimable(quest)` tells whether a claim would currently grant something
 (completed, or failed with unclaimed failure rewards). Failure rewards only work on non-retryable
 quests, because a retryable quest is reset on failure; the datapack loader warns about that
-combination. The quest book lists them in the detail pane under "Rewards if failed" and, when manual
-claiming is allowed, shows the Claim button on a failed quest until they are claimed.
+combination. The quest book lists them in the detail pane under "Rewards if failed".
 
 ```json
 "failure": {
@@ -276,6 +276,28 @@ Built-in reward types, under `com.ryankshah.questapi.api.quest.reward.impl`:
 Rewards are granted exactly once per quest, guarded by the `REWARDED` state - `QuestManager.claimRewards`
 returns `false` (and grants nothing) if the quest isn't `COMPLETED` or was already claimed, so a
 duplicate click, a lost ack, or a server crash right after claiming can never double-grant.
+
+**Rewards are never claimed from the quest book.** The book has no Claim button; the mod that owns
+the turn-in (an NPC dialog, a command, ...) calls `QuestManager#claimRewards`.
+
+**Reward choices:** a quest can offer a choice of rewards with a top-level `reward_choices` list next
+to `rewards`:
+
+```json
+"rewards": [{ "type": "questapi:item", "stack": { "id": "minecraft:bread", "count": 4 } }],
+"reward_choices": [
+  { "id": "sword", "label": "A sword", "rewards": [{ "type": "questapi:item", "stack": { "id": "minecraft:iron_sword", "count": 1 } }] },
+  { "id": "coins", "label": "Coins", "rewards": [{ "type": "questapi:item", "stack": { "id": "minecraft:gold_ingot", "count": 8 } }] }
+]
+```
+
+The fixed `rewards` are always granted, plus exactly one choice. Choice ids use only `a-z`, `0-9` and
+`_`, must be unique, and a quest needs at least two choices (a single choice is a load error; use a
+normal reward). Choices apply to the normal claim only, not to `failure.rewards`. Claim with
+`QuestManager#claimRewards(player, questId, choiceId)`, which returns `false` for an unknown choice;
+the two-argument claim returns `false` for a quest that has choices. The chosen id is saved as
+`QuestProgress#chosenReward()` and cleared when the quest resets. The book lists the choices read-only
+and shows "Chosen: ..." once the quest is rewarded.
 
 ## Prerequisites / conditions
 

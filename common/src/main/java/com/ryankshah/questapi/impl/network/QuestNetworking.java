@@ -70,7 +70,7 @@ public final class QuestNetworking {
 
     private static ManualQuestActions manualActions() {
         return new ManualQuestActions(DevConfig.allowManualStart(), DevConfig.allowManualAbandon(),
-                DevConfig.allowManualClaim(), DevConfig.allowManualDeliver());
+                DevConfig.allowManualDeliver());
     }
 
     /**
@@ -226,16 +226,6 @@ public final class QuestNetworking {
             return;
         }
         if (QuestApi.manager().abandonQuest(player, questId)) {
-            sendProgress(player);
-        }
-    }
-
-    public static void handleClaimReward(ServerPlayer player, Identifier questId) {
-        if (!DevConfig.allowManualClaim()) {
-            logBlocked("claim", player, questId);
-            return;
-        }
-        if (QuestApi.manager().claimRewards(player, questId)) {
             sendProgress(player);
         }
     }

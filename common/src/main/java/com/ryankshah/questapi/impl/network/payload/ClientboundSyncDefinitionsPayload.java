@@ -33,7 +33,6 @@ public record ClientboundSyncDefinitionsPayload(List<QuestCategory> categories, 
     private static final StreamCodec<ByteBuf, ManualQuestActions> MANUAL_ACTIONS_CODEC = StreamCodec.composite(
             ByteBufCodecs.BOOL, ManualQuestActions::start,
             ByteBufCodecs.BOOL, ManualQuestActions::abandon,
-            ByteBufCodecs.BOOL, ManualQuestActions::claim,
             ByteBufCodecs.BOOL, ManualQuestActions::deliver,
             ManualQuestActions::new
     );

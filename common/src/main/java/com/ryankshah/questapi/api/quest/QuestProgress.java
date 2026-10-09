@@ -7,6 +7,7 @@ import com.ryankshah.questapi.api.quest.objective.ObjectiveProgress;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Mutable, per-player runtime state for a single quest.
@@ -26,7 +27,8 @@ public final class QuestProgress {
             Codec.LONG.fieldOf("rewardedAt").forGetter(QuestProgress::rewardedAt),
             Codec.LONG.optionalFieldOf("rewardedAtDay", 0L).forGetter(QuestProgress::rewardedAtDay),
             Codec.LONG.optionalFieldOf("elapsedTicks", 0L).forGetter(QuestProgress::elapsedTicks),
-            Codec.BOOL.optionalFieldOf("failureRewardsClaimed", false).forGetter(QuestProgress::failureRewardsClaimed)
+            Codec.BOOL.optionalFieldOf("failureRewardsClaimed", false).forGetter(QuestProgress::failureRewardsClaimed),
+            Codec.STRING.optionalFieldOf("chosenReward").forGetter(QuestProgress::chosenReward)
     ).apply(instance, QuestProgress::new));
 
     private QuestState state;
@@ -37,8 +39,9 @@ public final class QuestProgress {
     private long rewardedAtDay;
     private long elapsedTicks;
     private boolean failureRewardsClaimed;
+    private Optional<String> chosenReward;
 
-    public QuestProgress(QuestState state, Map<Integer, ObjectiveProgress> objectives, long startedAt, long completedAt, long rewardedAt, long rewardedAtDay, long elapsedTicks, boolean failureRewardsClaimed) {
+    public QuestProgress(QuestState state, Map<Integer, ObjectiveProgress> objectives, long startedAt, long completedAt, long rewardedAt, long rewardedAtDay, long elapsedTicks, boolean failureRewardsClaimed, Optional<String> chosenReward) {
         this.state = state;
         this.objectives = new HashMap<>(objectives);
         this.startedAt = startedAt;
@@ -47,10 +50,11 @@ public final class QuestProgress {
         this.rewardedAtDay = rewardedAtDay;
         this.elapsedTicks = elapsedTicks;
         this.failureRewardsClaimed = failureRewardsClaimed;
+        this.chosenReward = chosenReward;
     }
 
     public static QuestProgress locked() {
-        return new QuestProgress(QuestState.LOCKED, Map.of(), 0, 0, 0, 0, 0, false);
+        return new QuestProgress(QuestState.LOCKED, Map.of(), 0, 0, 0, 0, 0, false, Optional.empty());
     }
 
     public QuestState state() {
@@ -214,6 +218,19 @@ public final class QuestProgress {
     }
 
     /**
+     * The id of the {@link RewardChoice} the player took when the quest was claimed, or empty if the
+     * quest has no reward choice or was not claimed yet. Cleared with the rest of the progress when
+     * the quest is reset or repeats.
+     */
+    public Optional<String> chosenReward() {
+        return chosenReward;
+    }
+
+    public void setChosenReward(String choiceId) {
+        this.chosenReward = Optional.ofNullable(choiceId);
+    }
+
+    /**
      * Whether claiming this quest's rewards would currently grant something: it is
      * {@link QuestState#COMPLETED}, or it is {@link QuestState#FAILED} with failure rewards that
      * were not claimed yet. Read-only, so it is safe to call from the client GUI as well.
@@ -233,6 +250,6 @@ public final class QuestProgress {
         for (Map.Entry<Integer, ObjectiveProgress> entry : objectives.entrySet()) {
             copiedObjectives.put(entry.getKey(), entry.getValue().copy());
         }
-        return new QuestProgress(state, copiedObjectives, startedAt, completedAt, rewardedAt, rewardedAtDay, elapsedTicks, failureRewardsClaimed);
+        return new QuestProgress(state, copiedObjectives, startedAt, completedAt, rewardedAt, rewardedAtDay, elapsedTicks, failureRewardsClaimed, chosenReward);
     }
 }

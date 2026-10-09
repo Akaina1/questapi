@@ -12,6 +12,7 @@ import com.ryankshah.questapi.api.quest.QuestState;
 import com.ryankshah.questapi.api.quest.QuestTimeLimit;
 import com.ryankshah.questapi.api.quest.QuestlineDefinition;
 import com.ryankshah.questapi.api.quest.ResetMode;
+import com.ryankshah.questapi.api.quest.RewardChoice;
 import com.ryankshah.questapi.api.quest.TimeLimitUnit;
 import com.ryankshah.questapi.api.quest.condition.QuestCondition;
 import com.ryankshah.questapi.api.quest.condition.TriggerKeys;
@@ -639,6 +640,19 @@ public final class QuestManagerImpl implements QuestManager {
 
     @Override
     public boolean claimRewards(ServerPlayer player, Identifier questId) {
+        return claim(player, questId, null);
+    }
+
+    @Override
+    public boolean claimRewards(ServerPlayer player, Identifier questId, String choiceId) {
+        return claim(player, questId, choiceId == null ? "" : choiceId);
+    }
+
+    /**
+     * Shared claim path. A {@code null} choice is the plain claim, which a quest with reward choices
+     * refuses; otherwise the choice must be one of the quest's own.
+     */
+    private boolean claim(ServerPlayer player, Identifier questId, String choiceId) {
         Quest quest = registry.getQuest(questId).orElse(null);
         PlayerQuestData data = dataFor(player);
         QuestProgress progress = data.get(questId);
@@ -651,9 +665,25 @@ public final class QuestManagerImpl implements QuestManager {
         if (progress.state() != QuestState.COMPLETED) {
             return false;
         }
+        RewardChoice chosen = null;
+        if (!quest.rewardChoices().isEmpty()) {
+            if (choiceId == null) {
+                return false;
+            }
+            chosen = quest.rewardChoice(choiceId).orElse(null);
+            if (chosen == null) {
+                return false;
+            }
+        }
         QuestContext ctx = new QuestContext(player, this);
         for (var reward : quest.rewards()) {
             reward.grant(ctx);
+        }
+        if (chosen != null) {
+            for (var reward : chosen.rewards()) {
+                reward.grant(ctx);
+            }
+            progress.setChosenReward(chosen.id());
         }
         progress.setState(QuestState.REWARDED);
         progress.setRewardedAt(System.currentTimeMillis());

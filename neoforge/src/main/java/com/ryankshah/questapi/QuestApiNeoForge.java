@@ -16,7 +16,6 @@ import com.ryankshah.questapi.impl.network.payload.ClientboundQuestUnlockedPaylo
 import com.ryankshah.questapi.impl.network.payload.ClientboundSyncDefinitionsPayload;
 import com.ryankshah.questapi.impl.network.payload.ClientboundSyncProgressPayload;
 import com.ryankshah.questapi.impl.network.payload.ServerboundAbandonQuestPayload;
-import com.ryankshah.questapi.impl.network.payload.ServerboundClaimRewardPayload;
 import com.ryankshah.questapi.impl.network.payload.ServerboundDeliverItemsPayload;
 import com.ryankshah.questapi.impl.network.payload.ServerboundRequestSyncPayload;
 import com.ryankshah.questapi.impl.network.payload.ServerboundStartQuestPayload;
@@ -91,8 +90,6 @@ public class QuestApiNeoForge {
                 (payload, context) -> QuestNetworking.handleToggleTrackQuest((ServerPlayer) context.player(), payload.questId()));
         registrar.playToServer(ServerboundAbandonQuestPayload.TYPE, ServerboundAbandonQuestPayload.STREAM_CODEC,
                 (payload, context) -> QuestNetworking.handleAbandonQuest((ServerPlayer) context.player(), payload.questId()));
-        registrar.playToServer(ServerboundClaimRewardPayload.TYPE, ServerboundClaimRewardPayload.STREAM_CODEC,
-                (payload, context) -> QuestNetworking.handleClaimReward((ServerPlayer) context.player(), payload.questId()));
         registrar.playToServer(ServerboundDeliverItemsPayload.TYPE, ServerboundDeliverItemsPayload.STREAM_CODEC,
                 (payload, context) -> QuestNetworking.handleDeliverItems((ServerPlayer) context.player(), payload.questId(), payload.objectiveIndex(), payload.amount()));
     }

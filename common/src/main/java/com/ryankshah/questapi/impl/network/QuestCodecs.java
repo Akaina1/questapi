@@ -18,6 +18,7 @@ import com.ryankshah.questapi.api.quest.QuestRepeat;
 import com.ryankshah.questapi.api.quest.QuestTimeLimit;
 import com.ryankshah.questapi.api.quest.QuestToastOverrides;
 import com.ryankshah.questapi.api.quest.ResetMode;
+import com.ryankshah.questapi.api.quest.RewardChoice;
 import com.ryankshah.questapi.api.quest.TimeLimitUnit;
 import com.ryankshah.questapi.api.quest.condition.QuestCondition;
 import com.ryankshah.questapi.api.quest.objective.ObjectiveDefinition;
@@ -213,6 +214,20 @@ public final class QuestCodecs {
         ).apply(instance, QuestFailureRules::new));
     }
 
+    public static Codec<RewardChoice> rewardChoiceCodec(QuestRegistry registry) {
+        return RecordCodecBuilder.create(instance -> instance.group(
+                Codec.STRING.validate(id -> RewardChoice.isValidId(id)
+                        ? DataResult.success(id)
+                        : DataResult.<String>error(() -> "Reward choice id '" + id + "' must use only a-z, 0-9 and _"))
+                        .fieldOf("id").forGetter(RewardChoice::id),
+                ComponentSerialization.CODEC.fieldOf("label").forGetter(RewardChoice::label),
+                rewardCodec(registry).listOf().validate(rewards -> rewards.isEmpty()
+                        ? DataResult.<List<QuestReward>>error(() -> "A reward choice needs at least one reward")
+                        : DataResult.success(rewards))
+                        .fieldOf("rewards").forGetter(RewardChoice::rewards)
+        ).apply(instance, RewardChoice::new));
+    }
+
     public static Codec<QuestToastOverrides> toastOverridesCodec() {
         return RecordCodecBuilder.create(instance -> instance.group(
                 ComponentSerialization.CODEC.optionalFieldOf("started").forGetter(QuestToastOverrides::started),
@@ -242,8 +257,9 @@ public final class QuestCodecs {
                 toastOverridesCodec().optionalFieldOf("toast_overrides").forGetter(Quest::toastOverrides),
                 Identifier.CODEC.optionalFieldOf("questline").forGetter(Quest::questline),
                 Codec.intRange(1, Integer.MAX_VALUE).optionalFieldOf("chapter").forGetter(Quest::chapter),
-                Codec.BOOL.optionalFieldOf("chapter_final", false).forGetter(Quest::chapterFinal)
-        ).apply(instance, (id, category, display, lifecycle, objectives, rewards, prerequisites, failure, toastOverrides, questline, chapter, chapterFinal) -> {
+                Codec.BOOL.optionalFieldOf("chapter_final", false).forGetter(Quest::chapterFinal),
+                rewardChoiceCodec(registry).listOf().optionalFieldOf("reward_choices", List.of()).forGetter(Quest::rewardChoices)
+        ).apply(instance, (id, category, display, lifecycle, objectives, rewards, prerequisites, failure, toastOverrides, questline, chapter, chapterFinal, rewardChoices) -> {
             Quest.Builder builder = Quest.builder(id)
                     .category(category)
                     .title(display.title())
@@ -254,6 +270,7 @@ public final class QuestCodecs {
                     .sequential(lifecycle.sequential())
                     .objectiveEntries(objectives)
                     .rewards(rewards)
+                    .rewardChoices(rewardChoices)
                     .requires(prerequisites);
             lifecycle.repeat().ifPresent(repeat -> builder.repeatable(repeat.resetMode(), repeat.amount()));
             failure.ifPresent(builder::failure);

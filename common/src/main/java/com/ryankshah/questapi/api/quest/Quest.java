@@ -28,6 +28,7 @@ public final class Quest {
     private final int[] firstObjectiveOfEntry;
     private final int[] stepOfEntry;
     private final List<QuestReward> rewards;
+    private final List<RewardChoice> rewardChoices;
     private final List<QuestCondition> prerequisites;
     private final Optional<QuestFailureRules> failure;
     private final Optional<QuestToastOverrides> toastOverrides;
@@ -71,6 +72,7 @@ public final class Quest {
         this.objectives = List.copyOf(flat);
         this.entryOfObjective = owners.stream().mapToInt(Integer::intValue).toArray();
         this.rewards = List.copyOf(builder.rewards);
+        this.rewardChoices = List.copyOf(builder.rewardChoices);
         this.prerequisites = List.copyOf(builder.prerequisites);
         this.failure = Optional.ofNullable(builder.failure);
         this.toastOverrides = Optional.ofNullable(builder.toastOverrides);
@@ -197,6 +199,21 @@ public final class Quest {
         return stepOfEntry[entryOfObjective[objectiveIndex]];
     }
 
+    /**
+     * The choices the player picks one of when claiming, on top of {@link #rewards()}. Empty for a
+     * quest without a reward choice; such a quest is claimed with no choice at all.
+     */
+    public List<RewardChoice> rewardChoices() {
+        return rewardChoices;
+    }
+
+    /**
+     * The choice with the given id, if this quest has it.
+     */
+    public Optional<RewardChoice> rewardChoice(String choiceId) {
+        return rewardChoices.stream().filter(choice -> choice.id().equals(choiceId)).findFirst();
+    }
+
     public List<QuestReward> rewards() {
         return rewards;
     }
@@ -279,6 +296,7 @@ public final class Quest {
         private Identifier categoryId;
         private final List<ObjectiveEntry> entries = new java.util.ArrayList<>();
         private final List<QuestReward> rewards = new java.util.ArrayList<>();
+        private final List<RewardChoice> rewardChoices = new java.util.ArrayList<>();
         private final List<QuestCondition> prerequisites = new java.util.ArrayList<>();
         private boolean autoActivate = false;
         private int sortOrder = 0;
@@ -404,6 +422,21 @@ public final class Quest {
             return this;
         }
 
+        /**
+         * Adds one option of the quest's reward choice. The player picks exactly one choice when
+         * claiming, and gets its rewards on top of the fixed {@link #reward(QuestReward) rewards}.
+         * A quest needs at least two choices or none.
+         */
+        public Builder rewardChoice(RewardChoice choice) {
+            this.rewardChoices.add(choice);
+            return this;
+        }
+
+        public Builder rewardChoices(List<RewardChoice> choices) {
+            this.rewardChoices.addAll(choices);
+            return this;
+        }
+
         public Builder requires(QuestCondition condition) {
             this.prerequisites.add(condition);
             return this;
@@ -479,6 +512,15 @@ public final class Quest {
             }
             if (entries.stream().allMatch(ObjectiveEntry::optional)) {
                 throw new IllegalStateException("Quest " + id + " needs at least one objective that is not optional");
+            }
+            if (rewardChoices.size() == 1) {
+                throw new IllegalStateException("Quest " + id + " has a single reward choice; use a normal reward or give it at least 2 choices");
+            }
+            java.util.Set<String> choiceIds = new java.util.HashSet<>();
+            for (RewardChoice choice : rewardChoices) {
+                if (!choiceIds.add(choice.id())) {
+                    throw new IllegalStateException("Quest " + id + " has two reward choices with the id '" + choice.id() + "'");
+                }
             }
             return new Quest(this);
         }

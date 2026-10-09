@@ -114,6 +114,18 @@ public interface QuestManager {
     boolean claimRewards(ServerPlayer player, Identifier questId);
 
     /**
+     * Claims a {@code COMPLETED} quest that has {@code reward_choices}: grants the quest's fixed
+     * rewards plus the rewards of the choice with the given id, remembers the choice in
+     * {@code QuestProgress#chosenReward} and transitions the quest to {@code REWARDED}.
+     * <p>
+     * Returns {@code false} if the quest is not completed, or if it has reward choices and
+     * {@code choiceId} is not one of them. A quest without reward choices ignores the choice and
+     * behaves like {@link #claimRewards(ServerPlayer, Identifier)}. The two-argument claim returns
+     * {@code false} for a quest that has reward choices.
+     */
+    boolean claimRewards(ServerPlayer player, Identifier questId, String choiceId);
+
+    /**
      * Removes {@code amount} matching items from the player's inventory and reports them delivered
      * to the given quest objective. Returns {@code false} if the player does not have enough items
      * or the objective is not a delivery objective.

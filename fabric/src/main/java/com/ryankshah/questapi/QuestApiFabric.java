@@ -16,7 +16,6 @@ import com.ryankshah.questapi.impl.network.payload.ClientboundQuestUnlockedPaylo
 import com.ryankshah.questapi.impl.network.payload.ClientboundSyncDefinitionsPayload;
 import com.ryankshah.questapi.impl.network.payload.ClientboundSyncProgressPayload;
 import com.ryankshah.questapi.impl.network.payload.ServerboundAbandonQuestPayload;
-import com.ryankshah.questapi.impl.network.payload.ServerboundClaimRewardPayload;
 import com.ryankshah.questapi.impl.network.payload.ServerboundDeliverItemsPayload;
 import com.ryankshah.questapi.impl.network.payload.ServerboundRequestSyncPayload;
 import com.ryankshah.questapi.impl.network.payload.ServerboundStartQuestPayload;
@@ -57,7 +56,6 @@ public class QuestApiFabric implements ModInitializer {
         PayloadTypeRegistry.serverboundPlay().register(ServerboundStartQuestPayload.TYPE, ServerboundStartQuestPayload.STREAM_CODEC);
         PayloadTypeRegistry.serverboundPlay().register(ServerboundToggleTrackQuestPayload.TYPE, ServerboundToggleTrackQuestPayload.STREAM_CODEC);
         PayloadTypeRegistry.serverboundPlay().register(ServerboundAbandonQuestPayload.TYPE, ServerboundAbandonQuestPayload.STREAM_CODEC);
-        PayloadTypeRegistry.serverboundPlay().register(ServerboundClaimRewardPayload.TYPE, ServerboundClaimRewardPayload.STREAM_CODEC);
         PayloadTypeRegistry.serverboundPlay().register(ServerboundDeliverItemsPayload.TYPE, ServerboundDeliverItemsPayload.STREAM_CODEC);
 
         ServerPlayNetworking.registerGlobalReceiver(ServerboundRequestSyncPayload.TYPE,
@@ -68,8 +66,6 @@ public class QuestApiFabric implements ModInitializer {
                 (payload, context) -> QuestNetworking.handleToggleTrackQuest(context.player(), payload.questId()));
         ServerPlayNetworking.registerGlobalReceiver(ServerboundAbandonQuestPayload.TYPE,
                 (payload, context) -> QuestNetworking.handleAbandonQuest(context.player(), payload.questId()));
-        ServerPlayNetworking.registerGlobalReceiver(ServerboundClaimRewardPayload.TYPE,
-                (payload, context) -> QuestNetworking.handleClaimReward(context.player(), payload.questId()));
         ServerPlayNetworking.registerGlobalReceiver(ServerboundDeliverItemsPayload.TYPE,
                 (payload, context) -> QuestNetworking.handleDeliverItems(context.player(), payload.questId(), payload.objectiveIndex(), payload.amount()));
 
