@@ -483,7 +483,7 @@ public final class QuestManagerImpl implements QuestManager {
         }
         evaluateQuests(player, List.of(quest));
         for (QuestEventListener listener : QuestEvents.listeners()) {
-            listener.onQuestReset(player, quest);
+            listener.onQuestAbandoned(player, quest);
         }
         notifyQuestChanged(player, quest);
         return true;

@@ -52,6 +52,15 @@ public interface QuestEventListener {
     default void onQuestFailed(ServerPlayer player, Quest quest) {
     }
 
+    /**
+     * Fired when an {@code ACTIVE} quest is abandoned through {@code QuestManager#abandonQuest}
+     * (the quest book, an NPC dialog or a command). The quest's progress is already gone and it
+     * reads as available again. {@link #onQuestReset} does not fire for an abandon, so it keeps
+     * meaning an administrative or automatic reset.
+     */
+    default void onQuestAbandoned(ServerPlayer player, Quest quest) {
+    }
+
     default void onQuestReset(ServerPlayer player, Quest quest) {
     }
 

@@ -51,6 +51,7 @@ public final class QuestScreen extends Screen {
     private static final int PROGRESS_BAR_HEIGHT = 3;
     private static final int GROUP_INDENT = 8;
     private static final int SCROLLBAR_WIDTH = 5;
+    private static final int ACTION_BUTTON_GAP = 2;
 
     private static final int TAB_HEIGHT = 20;
     private static final int TAB_GAP = 2;
@@ -256,18 +257,20 @@ public final class QuestScreen extends Screen {
                 }
             }
             case ACTIVE -> {
-                int trackY = buttonY;
-                if (allowed.abandon()) {
+                // Track/Untrack and Abandon share one row; without Abandon, Track takes the full width.
+                int trackWidth = detailWidth;
+                if (allowed.abandon() && selectedQuest.abandonable()) {
+                    trackWidth = (detailWidth - ACTION_BUTTON_GAP) / 2;
+                    int abandonX = detailX + trackWidth + ACTION_BUTTON_GAP;
                     actionButton = Button.builder(Component.translatable("questapi.gui.action.abandon"),
                                     b -> confirmAbandon(selectedQuest.id()))
-                            .bounds(detailX, buttonY, detailWidth, 20).build();
-                    trackY = buttonY - 22;
+                            .bounds(abandonX, buttonY, detailX + detailWidth - abandonX, 20).build();
                 }
                 boolean tracked = cache.isTracked(selectedQuest.id());
                 Component trackLabel = Component.translatable(tracked ? "questapi.gui.action.untrack" : "questapi.gui.action.track");
                 trackButton = Button.builder(trackLabel,
                                 b -> ClientQuestNetworking.requestToggleTrackQuest(selectedQuest.id()))
-                        .bounds(detailX, trackY, detailWidth, 20).build();
+                        .bounds(detailX, buttonY, trackWidth, 20).build();
             }
             default -> {
             }

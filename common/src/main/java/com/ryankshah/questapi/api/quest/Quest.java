@@ -44,7 +44,8 @@ public final class Quest {
         this.chapterFinal = builder.chapterFinal;
         this.display = new QuestDisplay(builder.title, builder.description, builder.icon, builder.sortOrder);
         this.lifecycle = new QuestLifecycle(builder.autoActivate, builder.sequential,
-                builder.repeatable ? Optional.of(new QuestRepeat(builder.resetMode, builder.resetAmount)) : Optional.empty());
+                builder.repeatable ? Optional.of(new QuestRepeat(builder.resetMode, builder.resetAmount)) : Optional.empty(),
+                builder.abandonable);
         this.entries = List.copyOf(builder.entries);
         List<ObjectiveDefinition> flat = new java.util.ArrayList<>();
         this.firstObjectiveOfEntry = new int[entries.size()];
@@ -288,6 +289,14 @@ public final class Quest {
         return lifecycle.sequential();
     }
 
+    /**
+     * Whether the player may abandon this quest from the quest book. Mods can always abandon it
+     * through {@code QuestManager#abandonQuest}.
+     */
+    public boolean abandonable() {
+        return lifecycle.abandonable();
+    }
+
     public static final class Builder {
         private final Identifier id;
         private Component title = Component.literal("Untitled Quest");
@@ -304,6 +313,7 @@ public final class Quest {
         private ResetMode resetMode = null;
         private int resetAmount = 0;
         private boolean sequential = false;
+        private boolean abandonable = false;
         private QuestFailureRules failure = null;
         private QuestToastOverrides toastOverrides = null;
         private Identifier questline = null;
@@ -462,6 +472,15 @@ public final class Quest {
          */
         public Builder sequential(boolean sequential) {
             this.sequential = sequential;
+            return this;
+        }
+
+        /**
+         * Lets the player abandon the quest from the quest book. Off by default, so story quests
+         * cannot be dropped.
+         */
+        public Builder abandonable(boolean abandonable) {
+            this.abandonable = abandonable;
             return this;
         }
 

@@ -58,4 +58,9 @@ public final class QuestSyncListener implements QuestEventListener {
     public void onQuestReset(ServerPlayer player, Quest quest) {
         QuestNetworking.sendProgress(player);
     }
+
+    @Override
+    public void onQuestAbandoned(ServerPlayer player, Quest quest) {
+        QuestNetworking.sendProgress(player);
+    }
 }

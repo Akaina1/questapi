@@ -68,7 +68,8 @@ public final class DevConfig {
     }
 
     /**
-     * Whether a player may abandon an {@code ACTIVE} quest themselves, through the quest book.
+     * Whether a player may abandon an {@code ACTIVE} quest themselves, through the quest book. This
+     * is the master switch: the quest must also be {@code lifecycle.abandonable}.
      */
     public static boolean allowManualAbandon() {
         return allowManualAbandon;
@@ -197,6 +198,7 @@ public final class DevConfig {
                         + "quests that don't specify their own reset mode.\n"
                         + "allow-manual-start/abandon/deliver: set to false to make the server ignore the matching\n"
                         + "quest book action, so quests can only be driven by code (for example from NPC dialogs).\n"
+                        + "allow-manual-abandon is the master switch: the book also needs the quest's lifecycle.abandonable.\n"
                         + "show-quest-unlocked-toast / show-quest-started-toast / show-quest-completed-toast /\n"
                         + "show-quest-rewarded-toast: set to false to suppress the toast and sound when a quest becomes\n"
                         + "available / is accepted / has all objectives complete (ready to turn in) / has its rewards claimed.\n"

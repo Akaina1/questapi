@@ -225,6 +225,11 @@ public final class QuestNetworking {
             logBlocked("abandon", player, questId);
             return;
         }
+        if (!QuestApi.registry().getQuest(questId).map(Quest::abandonable).orElse(false)) {
+            QuestApi.LOG.debug("Ignored manual quest abandon of {} from {}: the quest is not abandonable",
+                    questId, player.getName().getString());
+            return;
+        }
         if (QuestApi.manager().abandonQuest(player, questId)) {
             sendProgress(player);
         }

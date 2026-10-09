@@ -197,7 +197,7 @@ for the files behind the bundled "JSON Demo" category, reproduced here:
 A quest is made of nested blocks, each optional unless noted:
 
 - `display` (required): `title`, `description`, `icon`, `sort_order`.
-- `lifecycle`: `auto_activate`, `sequential`, and `repeat` (`reset_mode` optional, `reset_amount`). A quest is repeatable exactly when `repeat` is present.
+- `lifecycle`: `auto_activate`, `sequential`, `abandonable` and `repeat` (`reset_mode` optional, `reset_amount`). A quest is repeatable exactly when `repeat` is present. `abandonable` (default `false`) lets the player drop the quest from the quest book: the book shows an Abandon button next to Track only when the quest is abandonable and `allow-manual-abandon` is on in `questapi.properties`, and the server ignores an abandon packet for any other quest. Mods can always call `QuestManager#abandonQuest`.
 - `failure`: `retryable`, `time_limit` (`amount` and `unit`: `GAME_DAYS`, `GAME_HOURS` or `REAL_SECONDS`), `reason`, `fail_on` (a list of `{ "event": "<event key>", "during_step": <index> }`) and `rewards` (same reward entries as the top-level `rewards`, claimed once after the quest failed; see below).
 - `toast_overrides`: `started`, `ready`, `completed` and `failed` replace the title line of the matching toast.
 - `reward_choices` (top-level, next to `rewards`): a list of `{ "id", "label", "rewards" }` entries; see "Reward choices" below.
@@ -415,7 +415,7 @@ QuestEvents.register(new QuestEventListener() {
 ```
 
 Available callbacks: `onQuestRegistered`, `onQuestStarted`, `onObjectiveProgressChanged`,
-`onObjectiveCompleted`, `onQuestCompleted`, `onRewardClaimed`, `onQuestReset`. All fire server-side.
+`onObjectiveCompleted`, `onQuestCompleted`, `onRewardClaimed`, `onQuestAbandoned` (instead of `onQuestReset`, when an active quest is abandoned), `onQuestReset`. All fire server-side.
 
 ## Opening the default GUI
 
