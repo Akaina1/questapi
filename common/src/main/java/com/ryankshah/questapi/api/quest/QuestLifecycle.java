@@ -13,6 +13,9 @@ import java.util.Optional;
  * @param repeat       cooldown settings; empty for a quest that cannot be repeated
  * @param abandonable  the player may abandon the quest from the quest book (the book's Abandon
  *                     button also needs the {@code allow-manual-abandon} setting)
+ * @param hideWhenRewarded the quest book does not list the quest in its Completed tab once it is
+ *                     rewarded (for repeatable quests that would otherwise fill the tab)
  */
-public record QuestLifecycle(boolean autoActivate, boolean sequential, Optional<QuestRepeat> repeat, boolean abandonable) {
+public record QuestLifecycle(boolean autoActivate, boolean sequential, Optional<QuestRepeat> repeat, boolean abandonable,
+        boolean hideWhenRewarded) {
 }

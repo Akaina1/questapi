@@ -189,6 +189,7 @@ public final class QuestScreen extends Screen {
     private List<Quest> questsInTab(Identifier categoryId) {
         return cache.questsInCategory(categoryId).stream()
                 .filter(quest -> selectedTab.matches(cache.getState(quest.id())))
+                .filter(quest -> selectedTab != Tab.COMPLETED || !quest.hideWhenRewarded())
                 .toList();
     }
 

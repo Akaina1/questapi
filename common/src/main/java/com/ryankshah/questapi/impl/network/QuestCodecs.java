@@ -187,7 +187,8 @@ public final class QuestCodecs {
                 Codec.BOOL.optionalFieldOf("auto_activate", false).forGetter(QuestLifecycle::autoActivate),
                 Codec.BOOL.optionalFieldOf("sequential", false).forGetter(QuestLifecycle::sequential),
                 repeatCodec().optionalFieldOf("repeat").forGetter(QuestLifecycle::repeat),
-                Codec.BOOL.optionalFieldOf("abandonable", false).forGetter(QuestLifecycle::abandonable)
+                Codec.BOOL.optionalFieldOf("abandonable", false).forGetter(QuestLifecycle::abandonable),
+                Codec.BOOL.optionalFieldOf("hide_when_rewarded", false).forGetter(QuestLifecycle::hideWhenRewarded)
         ).apply(instance, QuestLifecycle::new));
     }
 
@@ -245,7 +246,7 @@ public final class QuestCodecs {
      * only for a genuinely new concern.
      */
     public static Codec<Quest> questCodec(QuestRegistry registry) {
-        QuestLifecycle defaultLifecycle = new QuestLifecycle(false, false, Optional.empty(), false);
+        QuestLifecycle defaultLifecycle = new QuestLifecycle(false, false, Optional.empty(), false, false);
         return RecordCodecBuilder.create(instance -> instance.group(
                 Identifier.CODEC.fieldOf("id").forGetter(Quest::id),
                 Identifier.CODEC.fieldOf("category").forGetter(Quest::categoryId),
@@ -270,6 +271,7 @@ public final class QuestCodecs {
                     .autoActivate(lifecycle.autoActivate())
                     .sequential(lifecycle.sequential())
                     .abandonable(lifecycle.abandonable())
+                    .hideWhenRewarded(lifecycle.hideWhenRewarded())
                     .objectiveEntries(objectives)
                     .rewards(rewards)
                     .rewardChoices(rewardChoices)

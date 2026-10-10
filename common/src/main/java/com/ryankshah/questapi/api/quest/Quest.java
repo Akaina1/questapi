@@ -45,7 +45,7 @@ public final class Quest {
         this.display = new QuestDisplay(builder.title, builder.description, builder.icon, builder.sortOrder);
         this.lifecycle = new QuestLifecycle(builder.autoActivate, builder.sequential,
                 builder.repeatable ? Optional.of(new QuestRepeat(builder.resetMode, builder.resetAmount)) : Optional.empty(),
-                builder.abandonable);
+                builder.abandonable, builder.hideWhenRewarded);
         this.entries = List.copyOf(builder.entries);
         List<ObjectiveDefinition> flat = new java.util.ArrayList<>();
         this.firstObjectiveOfEntry = new int[entries.size()];
@@ -297,6 +297,14 @@ public final class Quest {
         return lifecycle.abandonable();
     }
 
+    /**
+     * Whether the quest book leaves this quest out of its Completed tab once it is rewarded. The
+     * quest still shows in the Ongoing tab while it is active or ready to claim.
+     */
+    public boolean hideWhenRewarded() {
+        return lifecycle.hideWhenRewarded();
+    }
+
     public static final class Builder {
         private final Identifier id;
         private Component title = Component.literal("Untitled Quest");
@@ -314,6 +322,7 @@ public final class Quest {
         private int resetAmount = 0;
         private boolean sequential = false;
         private boolean abandonable = false;
+        private boolean hideWhenRewarded = false;
         private QuestFailureRules failure = null;
         private QuestToastOverrides toastOverrides = null;
         private Identifier questline = null;
@@ -481,6 +490,14 @@ public final class Quest {
          */
         public Builder abandonable(boolean abandonable) {
             this.abandonable = abandonable;
+            return this;
+        }
+
+        /**
+         * Keeps the quest out of the quest book's Completed tab once it is rewarded. Off by default.
+         */
+        public Builder hideWhenRewarded(boolean hideWhenRewarded) {
+            this.hideWhenRewarded = hideWhenRewarded;
             return this;
         }
 
