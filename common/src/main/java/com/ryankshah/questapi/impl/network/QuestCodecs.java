@@ -170,7 +170,8 @@ public final class QuestCodecs {
                 ComponentSerialization.CODEC.fieldOf("title").forGetter(QuestDisplay::title),
                 ComponentSerialization.CODEC.optionalFieldOf("description", Component.empty()).forGetter(QuestDisplay::description),
                 ItemStack.CODEC.fieldOf("icon").forGetter(QuestDisplay::icon),
-                Codec.INT.optionalFieldOf("sort_order", 0).forGetter(QuestDisplay::sortOrder)
+                Codec.INT.optionalFieldOf("sort_order", 0).forGetter(QuestDisplay::sortOrder),
+                Codec.intRange(1, Integer.MAX_VALUE).optionalFieldOf("level").forGetter(QuestDisplay::level)
         ).apply(instance, QuestDisplay::new));
     }
 
@@ -276,6 +277,7 @@ public final class QuestCodecs {
                     .rewards(rewards)
                     .rewardChoices(rewardChoices)
                     .requires(prerequisites);
+            display.level().ifPresent(builder::level);
             lifecycle.repeat().ifPresent(repeat -> builder.repeatable(repeat.resetMode(), repeat.amount()));
             failure.ifPresent(builder::failure);
             toastOverrides.ifPresent(builder::toastOverrides);

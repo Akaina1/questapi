@@ -464,7 +464,16 @@ public final class QuestScreen extends Screen {
         clipBottom = areaBottom;
         graphics.item(quest.icon(), x, y);
         int titleTextWidth = width - 22;
-        int headerY = drawWrapped(graphics, quest.title(), x + 22, y + 1, titleTextWidth, 0xFFFFFF55);
+        int titleX = x + 22;
+        int titleWidth = titleTextWidth;
+        Component levelTag = QuestGuiText.levelTag(quest);
+        if (levelTag != null) {
+            graphics.text(font, levelTag, titleX, y + 1, 0xFFFFFFFF);
+            int tagWidth = font.width(levelTag) + 3;
+            titleX += tagWidth;
+            titleWidth -= tagWidth;
+        }
+        int headerY = drawWrapped(graphics, quest.title(), titleX, y + 1, titleWidth, 0xFFFFFF55);
         headerY = Math.max(headerY, y + 12);
         headerY = drawWrapped(graphics, QuestGuiText.stateLabel(quest, state), x + 22, headerY, titleTextWidth, QuestGuiText.stateColor(state));
         headerY += 2;

@@ -42,7 +42,8 @@ public final class Quest {
         this.questline = Optional.ofNullable(builder.questline);
         this.chapter = Optional.ofNullable(builder.chapter);
         this.chapterFinal = builder.chapterFinal;
-        this.display = new QuestDisplay(builder.title, builder.description, builder.icon, builder.sortOrder);
+        this.display = new QuestDisplay(builder.title, builder.description, builder.icon, builder.sortOrder,
+                Optional.ofNullable(builder.level));
         this.lifecycle = new QuestLifecycle(builder.autoActivate, builder.sequential,
                 builder.repeatable ? Optional.of(new QuestRepeat(builder.resetMode, builder.resetAmount)) : Optional.empty(),
                 builder.abandonable, builder.hideWhenRewarded);
@@ -125,6 +126,14 @@ public final class Quest {
 
     public ItemStack icon() {
         return display.icon();
+    }
+
+    /**
+     * The level this quest is written for, shown as a tag in the quest book. Purely informational:
+     * Quest API never compares it with anything, use a condition to lock a quest by level.
+     */
+    public Optional<Integer> level() {
+        return display.level();
     }
 
     public Identifier categoryId() {
@@ -317,6 +326,7 @@ public final class Quest {
         private final List<QuestCondition> prerequisites = new java.util.ArrayList<>();
         private boolean autoActivate = false;
         private int sortOrder = 0;
+        private Integer level = null;
         private boolean repeatable = false;
         private ResetMode resetMode = null;
         private int resetAmount = 0;
@@ -473,6 +483,17 @@ public final class Quest {
 
         public Builder sortOrder(int sortOrder) {
             this.sortOrder = sortOrder;
+            return this;
+        }
+
+        /**
+         * Sets the level the quest is written for (1 or higher), shown as a tag in the quest book.
+         */
+        public Builder level(int level) {
+            if (level < 1) {
+                throw new IllegalArgumentException("Quest " + id + " level must be 1 or higher");
+            }
+            this.level = level;
             return this;
         }
 

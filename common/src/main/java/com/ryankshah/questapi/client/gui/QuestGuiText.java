@@ -31,6 +31,23 @@ public final class QuestGuiText {
     }
 
     /**
+     * The quest's "[Lv N]" tag, coloured by how its level compares to the player's level (the
+     * vanilla experience level, so a mod that mirrors its own level onto the XP bar gets matching
+     * colours): grey at 6 or more below, white up to 2 above, yellow up to 5 above, red beyond.
+     * {@code null} if the quest has no level.
+     */
+    public static Component levelTag(Quest quest) {
+        if (quest.level().isEmpty()) {
+            return null;
+        }
+        int level = quest.level().get();
+        var player = net.minecraft.client.Minecraft.getInstance().player;
+        int difference = level - (player == null ? level : player.experienceLevel);
+        int color = difference <= -6 ? 0xAAAAAA : difference <= 2 ? 0xFFFFFF : difference <= 5 ? 0xFFFF55 : 0xFF5555;
+        return Component.translatable("questapi.gui.level_tag", level).withStyle(style -> style.withColor(color));
+    }
+
+    /**
      * "Time limit: 5 day(s)" for a quest with a time limit, or {@code null} if it has none.
      */
     public static Component timeLimitLabel(Quest quest) {

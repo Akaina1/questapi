@@ -45,6 +45,7 @@
   "questapi.gui.action.untrack": "Untrack",
   "questapi.gui.action.deliver": "Deliver",
   "questapi.gui.action.deliver.tooltip": "Deliver items (%1$s remaining)",
+  "questapi.gui.level_tag": "[Lv %s]",
   "questapi.gui.state.locked": "Locked",
   "questapi.gui.state.available": "Available",
   "questapi.gui.state.active": "In Progress",
