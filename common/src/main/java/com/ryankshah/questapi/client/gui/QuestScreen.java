@@ -384,7 +384,7 @@ public final class QuestScreen extends Screen {
         graphics.fill(left + 1, top + 1, right - 1, bottom - 1, hovered ? ABANDON_HOVER_COLOR : ABANDON_COLOR);
         Component label = Component.translatable("questapi.gui.action.abandon");
         graphics.text(font, label, left + (button.getWidth() - font.width(label)) / 2,
-                top + (button.getHeight() - 8) / 2, 0xFF000000);
+                top + (button.getHeight() - 8) / 2, 0xFF000000, false);
     }
 
     /**
