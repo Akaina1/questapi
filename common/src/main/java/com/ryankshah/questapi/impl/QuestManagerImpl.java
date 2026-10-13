@@ -492,7 +492,8 @@ public final class QuestManagerImpl implements QuestManager {
     @Override
     public boolean toggleTracked(ServerPlayer player, Identifier questId) {
         PlayerQuestData data = dataFor(player);
-        if (!data.isTracked(questId) && getState(player, questId) != QuestState.ACTIVE) {
+        QuestState state = getState(player, questId);
+        if (!data.isTracked(questId) && state != QuestState.ACTIVE && state != QuestState.COMPLETED) {
             return false;
         }
         data.toggleTracked(questId);

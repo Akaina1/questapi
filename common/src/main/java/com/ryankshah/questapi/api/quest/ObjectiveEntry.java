@@ -3,6 +3,7 @@ package com.ryankshah.questapi.api.quest;
 import com.ryankshah.questapi.api.quest.objective.ObjectiveDefinition;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * One line of a quest's objective list as the quest author wrote it: either a single objective or a
@@ -10,13 +11,17 @@ import java.util.List;
  * <p>
  * Progress is still saved per objective, by the position in the flat {@link Quest#objectives()}
  * list, where the options of a group are numbered one after another. An entry only adds the rules
- * on top of that list: whether it is optional, and how many options a group needs.
+ * on top of that list: whether it is optional, how many options a group needs, and the optional
+ * place it is about.
  *
  * @param options  the objectives of this entry; one for a single objective, two or more for a group
  * @param required how many options must be complete (always 1 for a single objective)
  * @param optional {@code true} if the quest can complete without this entry being done
+ * @param location the authored place this step is about, if the quest names one (a hint for compasses
+ *                 and maps, see {@link ObjectiveLocation}); it covers every option of a group
  */
-public record ObjectiveEntry(List<ObjectiveDefinition> options, int required, boolean optional) {
+public record ObjectiveEntry(List<ObjectiveDefinition> options, int required, boolean optional,
+                             Optional<ObjectiveLocation> location) {
 
     public ObjectiveEntry {
         options = List.copyOf(options);
@@ -29,8 +34,19 @@ public record ObjectiveEntry(List<ObjectiveDefinition> options, int required, bo
         }
     }
 
+    /**
+     * An entry without a location.
+     */
+    public ObjectiveEntry(List<ObjectiveDefinition> options, int required, boolean optional) {
+        this(options, required, optional, Optional.empty());
+    }
+
     public static ObjectiveEntry single(ObjectiveDefinition objective, boolean optional) {
-        return new ObjectiveEntry(List.of(objective), 1, optional);
+        return new ObjectiveEntry(List.of(objective), 1, optional, Optional.empty());
+    }
+
+    public static ObjectiveEntry single(ObjectiveDefinition objective, boolean optional, Optional<ObjectiveLocation> location) {
+        return new ObjectiveEntry(List.of(objective), 1, optional, location);
     }
 
     /**

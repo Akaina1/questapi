@@ -273,6 +273,14 @@ public final class QuestScreen extends Screen {
                                 b -> ClientQuestNetworking.requestToggleTrackQuest(selectedQuest.id()))
                         .bounds(detailX, buttonY, trackWidth, 20).build();
             }
+            case COMPLETED -> {
+                // A finished quest that is not handed in yet can stay on the HUD until it is.
+                boolean tracked = cache.isTracked(selectedQuest.id());
+                Component trackLabel = Component.translatable(tracked ? "questapi.gui.action.untrack" : "questapi.gui.action.track");
+                trackButton = Button.builder(trackLabel,
+                                b -> ClientQuestNetworking.requestToggleTrackQuest(selectedQuest.id()))
+                        .bounds(detailX, buttonY, detailWidth, 20).build();
+            }
             default -> {
             }
         }

@@ -110,15 +110,16 @@ public final class PlayerQuestData {
     }
 
     /**
-     * Drops every pinned quest that is no longer {@code ACTIVE}, so the saved list never keeps
-     * stale entries after a quest completes, fails, is abandoned or reset.
+     * Drops every pinned quest that is neither {@code ACTIVE} nor {@code COMPLETED}, so the saved
+     * list never keeps stale entries after a quest is handed in (rewarded), fails, is abandoned or
+     * reset. A completed quest stays pinned until the player unpins it or hands it in.
      *
      * @return whether anything was removed
      */
     public boolean pruneTracked() {
         return tracked.removeIf(id -> {
             QuestProgress p = progress.get(id);
-            return p == null || p.state() != QuestState.ACTIVE;
+            return p == null || (p.state() != QuestState.ACTIVE && p.state() != QuestState.COMPLETED);
         });
     }
 

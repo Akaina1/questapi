@@ -60,7 +60,8 @@ public final class QuestTrackerHud {
         try {
             for (Identifier trackedId : trackedIds) {
                 Quest quest = cache.getQuest(trackedId).orElse(null);
-                if (quest == null || cache.getState(trackedId) != QuestState.ACTIVE) {
+                QuestState trackedState = cache.getState(trackedId);
+                if (quest == null || (trackedState != QuestState.ACTIVE && trackedState != QuestState.COMPLETED)) {
                     continue;
                 }
                 y = renderQuest(graphics, minecraft.font, cache, quest, x, y) + BLOCK_GAP;
@@ -80,6 +81,9 @@ public final class QuestTrackerHud {
         OptionalLong remainingTicks = cache.remainingLimitTicks(quest);
         List<FormattedCharSequence> timeLines = remainingTicks.isPresent()
                 ? font.split(QuestGuiText.timeRemainingLabel(quest, remainingTicks.getAsLong(), cache.ticksPerGameDay()), WIDTH)
+                : List.of();
+        List<FormattedCharSequence> readyLines = cache.getState(quest.id()) == QuestState.COMPLETED
+                ? font.split(Component.translatable("questapi.gui.tracker.ready"), WIDTH)
                 : List.of();
         List<Row> rows = new ArrayList<>();
         List<ObjectiveEntry> entries = quest.objectiveEntries();
@@ -109,7 +113,8 @@ public final class QuestTrackerHud {
             }
         }
 
-        int contentHeight = titleLines.size() * LINE_HEIGHT + timeLines.size() * LINE_HEIGHT + 2;
+        int contentHeight = titleLines.size() * LINE_HEIGHT + timeLines.size() * LINE_HEIGHT
+                + readyLines.size() * LINE_HEIGHT + 2;
         for (Row row : rows) {
             contentHeight += row.lines().size() * LINE_HEIGHT + (row.isHeader() ? 0 : BAR_HEIGHT + 2);
         }
@@ -123,6 +128,10 @@ public final class QuestTrackerHud {
         }
         for (FormattedCharSequence line : timeLines) {
             graphics.text(font, line, x, cursorY, 0xFFFFAA00);
+            cursorY += LINE_HEIGHT;
+        }
+        for (FormattedCharSequence line : readyLines) {
+            graphics.text(font, line, x, cursorY, 0xFF55FF55);
             cursorY += LINE_HEIGHT;
         }
         cursorY += 2;

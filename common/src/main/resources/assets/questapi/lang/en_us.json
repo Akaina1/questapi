@@ -79,6 +79,7 @@
 
   "questapi.toast.objective_completed.title": "Objective complete",
   "questapi.toast.quest_ready.title": "Ready to turn in",
+  "questapi.gui.tracker.ready": "Ready to turn in",
   "questapi.toast.quest_rewarded.title": "Quest completed",
   "questapi.toast.quest_unlocked.title": "New quest available",
   "questapi.toast.quest_started.title": "Quest accepted",

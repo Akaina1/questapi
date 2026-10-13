@@ -187,6 +187,14 @@ public final class Quest {
     }
 
     /**
+     * The authored place the objective at flat position {@code objectiveIndex} is about: the
+     * {@code location} of its entry, or empty if the quest names none.
+     */
+    public Optional<ObjectiveLocation> locationOf(int objectiveIndex) {
+        return entries.get(entryOfObjective[objectiveIndex]).location();
+    }
+
+    /**
      * The flat position of the first objective of entry {@code entryIndex}.
      */
     public int firstObjectiveOf(int entryIndex) {
