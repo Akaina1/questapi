@@ -14,6 +14,7 @@ import com.ryankshah.questapi.api.quest.objective.ObjectiveProgress;
 import com.ryankshah.questapi.api.quest.objective.impl.DeliverItemObjective;
 import com.ryankshah.questapi.api.quest.reward.QuestReward;
 import com.ryankshah.questapi.client.ClientQuestDataCache;
+import com.ryankshah.questapi.client.ClientQuestHooks;
 import com.ryankshah.questapi.client.network.ClientQuestNetworking;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -24,6 +25,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.FormattedText;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
+import net.minecraft.util.FormattedCharSequence;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -52,6 +54,11 @@ public final class QuestScreen extends Screen {
     private static final int GROUP_INDENT = 8;
     private static final int SCROLLBAR_WIDTH = 5;
     private static final int ACTION_BUTTON_GAP = 2;
+    private static final int BUTTON_HEIGHT = 20;
+    private static final int REWARDS_TOOLTIP_WIDTH = 200;
+    private static final int ABANDON_BORDER = 0xFF601010;
+    private static final int ABANDON_COLOR = 0xFFC83232;
+    private static final int ABANDON_HOVER_COLOR = 0xFFE65050;
 
     private static final int TAB_HEIGHT = 20;
     private static final int TAB_GAP = 2;
@@ -106,6 +113,11 @@ public final class QuestScreen extends Screen {
     private QuestListWidget questList;
     private Button actionButton;
     private Button trackButton;
+    private Button pathButton;
+    /** Whether {@link #actionButton} is the Abandon button, which is drawn red with black text. */
+    private boolean actionIsAbandon;
+    /** Set when a button press changes what the buttons should say; they are rebuilt on the next tick. */
+    private boolean buttonsDirty;
     private final List<DeliverButtonBounds> deliverButtons = new ArrayList<>();
     private int lastMouseX;
     private int lastMouseY;
@@ -242,54 +254,62 @@ public final class QuestScreen extends Screen {
             removeWidget(trackButton);
             trackButton = null;
         }
+        if (pathButton != null) {
+            removeWidget(pathButton);
+            pathButton = null;
+        }
+        actionIsAbandon = false;
         if (selectedQuest == null) {
             return;
         }
         QuestState state = cache.getState(selectedQuest.id());
         ManualQuestActions allowed = cache.manualActions();
-        int buttonY = topPos + panelHeight - MARGIN - 20;
+        Identifier questId = selectedQuest.id();
+        int panelBottom = topPos + panelHeight - MARGIN;
 
-        switch (state) {
-            case AVAILABLE -> {
-                if (allowed.start()) {
-                    actionButton = Button.builder(Component.translatable("questapi.gui.action.start"),
-                                    b -> ClientQuestNetworking.requestStartQuest(selectedQuest.id()))
-                            .bounds(detailX, buttonY, detailWidth, 20).build();
-                }
-            }
-            case ACTIVE -> {
-                // Track/Untrack and Abandon share one row; without Abandon, Track takes the full width.
-                int trackWidth = detailWidth;
-                if (allowed.abandon() && selectedQuest.abandonable()) {
-                    trackWidth = (detailWidth - ACTION_BUTTON_GAP) / 2;
-                    int abandonX = detailX + trackWidth + ACTION_BUTTON_GAP;
-                    actionButton = Button.builder(Component.translatable("questapi.gui.action.abandon"),
-                                    b -> confirmAbandon(selectedQuest.id()))
-                            .bounds(abandonX, buttonY, detailX + detailWidth - abandonX, 20).build();
-                }
-                boolean tracked = cache.isTracked(selectedQuest.id());
-                Component trackLabel = Component.translatable(tracked ? "questapi.gui.action.untrack" : "questapi.gui.action.track");
-                trackButton = Button.builder(trackLabel,
-                                b -> ClientQuestNetworking.requestToggleTrackQuest(selectedQuest.id()))
-                        .bounds(detailX, buttonY, trackWidth, 20).build();
-            }
-            case COMPLETED -> {
-                // A finished quest that is not handed in yet can stay on the HUD until it is.
-                boolean tracked = cache.isTracked(selectedQuest.id());
-                Component trackLabel = Component.translatable(tracked ? "questapi.gui.action.untrack" : "questapi.gui.action.track");
-                trackButton = Button.builder(trackLabel,
-                                b -> ClientQuestNetworking.requestToggleTrackQuest(selectedQuest.id()))
-                        .bounds(detailX, buttonY, detailWidth, 20).build();
-            }
-            default -> {
-            }
+        // Second row, full width: Start for an available quest, Abandon for an active one that may be abandoned.
+        boolean showStart = state == QuestState.AVAILABLE && allowed.start();
+        boolean showAbandon = state == QuestState.ACTIVE && allowed.abandon() && selectedQuest.abandonable();
+        actionIsAbandon = showAbandon;
+        int secondRowY = panelBottom - BUTTON_HEIGHT;
+        int firstRowY = (showStart || showAbandon) ? secondRowY - ACTION_BUTTON_GAP - BUTTON_HEIGHT : secondRowY;
+        if (showStart) {
+            actionButton = Button.builder(Component.translatable("questapi.gui.action.start"),
+                            b -> ClientQuestNetworking.requestStartQuest(questId))
+                    .bounds(detailX, secondRowY, detailWidth, BUTTON_HEIGHT).build();
+        } else if (showAbandon) {
+            actionButton = Button.builder(Component.translatable("questapi.gui.action.abandon"),
+                            b -> confirmAbandon(questId))
+                    .bounds(detailX, secondRowY, detailWidth, BUTTON_HEIGHT).build();
         }
+
+        // First row, always there: Track/Untrack and Show/Hide Path side by side. Both only work for a
+        // quest that is in progress or finished and not handed in, so they are greyed out otherwise.
+        boolean trackable = state == QuestState.ACTIVE || state == QuestState.COMPLETED;
+        int trackWidth = (detailWidth - ACTION_BUTTON_GAP) / 2;
+        int pathX = detailX + trackWidth + ACTION_BUTTON_GAP;
+        Component trackLabel = Component.translatable(
+                cache.isTracked(questId) ? "questapi.gui.action.untrack" : "questapi.gui.action.track");
+        trackButton = Button.builder(trackLabel, b -> ClientQuestNetworking.requestToggleTrackQuest(questId))
+                .bounds(detailX, firstRowY, trackWidth, BUTTON_HEIGHT).build();
+        trackButton.active = trackable;
+
+        Optional<ClientQuestHooks.PathControl> pathControl = ClientQuestHooks.pathControl();
+        boolean pathShown = pathControl.map(control -> control.isPathShown(questId)).orElse(true);
+        Component pathLabel = Component.translatable(pathShown ? "questapi.gui.action.hide_path" : "questapi.gui.action.show_path");
+        pathButton = Button.builder(pathLabel, b -> {
+                    pathControl.ifPresent(control -> control.setPathShown(questId, !pathShown));
+                    // The buttons are rebuilt on the next tick, not from inside this click.
+                    buttonsDirty = true;
+                })
+                .bounds(pathX, firstRowY, detailX + detailWidth - pathX, BUTTON_HEIGHT).build();
+        pathButton.active = trackable && pathControl.isPresent();
+
         if (actionButton != null) {
             addRenderableWidget(actionButton);
         }
-        if (trackButton != null) {
-            addRenderableWidget(trackButton);
-        }
+        addRenderableWidget(trackButton);
+        addRenderableWidget(pathButton);
     }
 
     private void confirmAbandon(Identifier questId) {
@@ -306,6 +326,10 @@ public final class QuestScreen extends Screen {
 
     @Override
     public void tick() {
+        if (buttonsDirty) {
+            buttonsDirty = false;
+            refreshActionButton();
+        }
         if (cache.revision() != lastSeenRevision) {
             lastSeenRevision = cache.revision();
             if (tabsIncludeAvailable != cache.manualActions().start()) {
@@ -332,6 +356,10 @@ public final class QuestScreen extends Screen {
 
         super.extractRenderState(graphics, mouseX, mouseY, partialTick);
 
+        if (actionButton != null && actionIsAbandon) {
+            drawAbandonButton(graphics, actionButton, mouseX, mouseY);
+        }
+
         this.lastMouseX = mouseX;
         this.lastMouseY = mouseY;
         deliverButtons.clear();
@@ -340,6 +368,23 @@ public final class QuestScreen extends Screen {
         } else if (selectedCategory == null) {
             drawWrapped(graphics, Component.translatable("questapi.gui.empty"), detailX, detailY, detailWidth, 0xFF888888);
         }
+    }
+
+    /**
+     * Paints the Abandon button red with black text over the vanilla button, which still receives the
+     * clicks. Vanilla buttons have no colour of their own.
+     */
+    private void drawAbandonButton(GuiGraphicsExtractor graphics, Button button, int mouseX, int mouseY) {
+        int left = button.getX();
+        int top = button.getY();
+        int right = left + button.getWidth();
+        int bottom = top + button.getHeight();
+        boolean hovered = mouseX >= left && mouseX < right && mouseY >= top && mouseY < bottom;
+        graphics.fill(left, top, right, bottom, ABANDON_BORDER);
+        graphics.fill(left + 1, top + 1, right - 1, bottom - 1, hovered ? ABANDON_HOVER_COLOR : ABANDON_COLOR);
+        Component label = Component.translatable("questapi.gui.action.abandon");
+        graphics.text(font, label, left + (button.getWidth() - font.width(label)) / 2,
+                top + (button.getHeight() - 8) / 2, 0xFF000000);
     }
 
     /**
@@ -367,20 +412,33 @@ public final class QuestScreen extends Screen {
         return y >= clipTop && y + height <= clipBottom;
     }
 
-    private int wrappedHeight(FormattedText text, int width) {
-        return font.split(text, width).size() * LINE_HEIGHT;
+    /**
+     * The top edge of the topmost action button, or the bottom of the panel if there are none.
+     */
+    private int buttonsTop() {
+        int top = topPos + panelHeight - MARGIN;
+        for (Button button : new Button[]{actionButton, trackButton, pathButton}) {
+            if (button != null) {
+                top = Math.min(top, button.getY());
+            }
+        }
+        return top;
+    }
+
+    /** The Y of the fixed "Rewards" row, which sits just above the buttons. */
+    private int rewardsRowY() {
+        return buttonsTop() - 4 - LINE_HEIGHT;
     }
 
     /**
-     * The lowest Y the detail text may reach: just above the action buttons if there are any, so
-     * text never runs under them.
+     * The lowest Y the detail text may reach: just above the rewards row if the quest has one, else
+     * just above the action buttons, so text never runs under them.
      */
     private int detailAreaBottom() {
-        int bottom = topPos + panelHeight - MARGIN - 4;
-        for (Button button : new Button[]{actionButton, trackButton}) {
-            if (button != null) {
-                bottom = Math.min(bottom, button.getY() - 4);
-            }
+        int bottom = buttonsTop() - 4;
+        if (selectedQuest != null && hasRewardsInfo(selectedQuest, cache.getState(selectedQuest.id()),
+                cache.getProgress(selectedQuest.id()))) {
+            bottom = rewardsRowY() - 4;
         }
         return bottom;
     }
@@ -421,32 +479,6 @@ public final class QuestScreen extends Screen {
         return Optional.of(new ChoiceBlock(Component.translatable("questapi.gui.reward_choices"), 0xFFFFAA00, lines));
     }
 
-    /**
-     * Height of the always-visible rewards block (rewards, the reward choice, plus failure rewards
-     * if the quest has any).
-     */
-    private int rewardsHeight(Quest quest, QuestState state, QuestProgress progress, int width) {
-        int height = wrappedHeight(Component.translatable("questapi.gui.rewards"), width);
-        for (QuestReward reward : quest.rewards()) {
-            height += wrappedHeight(Component.literal("- ").append(reward.describe()), width);
-        }
-        Optional<ChoiceBlock> choices = choiceBlock(quest, state, progress);
-        if (choices.isPresent()) {
-            height += 4 + wrappedHeight(choices.get().header(), width);
-            for (Component line : choices.get().lines()) {
-                height += wrappedHeight(line, width);
-            }
-        }
-        List<QuestReward> failureRewards = quest.failureRewards();
-        if (!failureRewards.isEmpty()) {
-            height += 4 + wrappedHeight(Component.translatable("questapi.gui.failure_rewards"), width);
-            for (QuestReward reward : failureRewards) {
-                height += wrappedHeight(Component.literal("- ").append(reward.describe()), width);
-            }
-        }
-        return height;
-    }
-
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         if (selectedQuest != null && mouseX >= detailX - 4 && mouseX < leftPos + panelWidth - MARGIN
@@ -482,16 +514,14 @@ public final class QuestScreen extends Screen {
             titleWidth -= tagWidth;
         }
         int headerY = drawWrapped(graphics, quest.title(), titleX, y + 1, titleWidth, 0xFFFFFF55);
-        headerY = Math.max(headerY, y + 12);
-        headerY = drawWrapped(graphics, QuestGuiText.stateLabel(quest, state), x + 22, headerY, titleTextWidth, QuestGuiText.stateColor(state));
+        // The header is the icon, the level and the title; the state is not repeated here because the
+        // quest list already shows it.
+        headerY = Math.max(headerY, y + 16);
         headerY += 2;
 
-        // The rewards get the bottom of the area (at most half of what is left under the header);
-        // the scrollable middle gets everything between the header and the rewards.
-        int footerHeight = Math.min(rewardsHeight(quest, state, progress, width), Math.max(0, (areaBottom - headerY) / 2));
-        int footerTop = areaBottom - footerHeight;
+        // The scrollable middle gets everything between the header and the rewards row (or the buttons).
         int viewTop = headerY;
-        int viewBottom = footerTop - 4;
+        int viewBottom = areaBottom;
         int viewHeight = Math.max(0, viewBottom - viewTop);
         detailScroll = Math.max(0, Math.min(detailScroll, detailContentHeight - viewHeight));
 
@@ -503,15 +533,26 @@ public final class QuestScreen extends Screen {
         QuestFailureRules failureRules = quest.failure().orElse(null);
         if (failureRules != null) {
             Component limitLabel = QuestGuiText.timeLimitLabel(quest);
-            if (limitLabel != null) {
-                cursorY = drawWrapped(graphics, limitLabel, x, cursorY, width, 0xFFAAAAAA);
-            }
             OptionalLong remainingTicks = cache.remainingLimitTicks(quest);
-            if (remainingTicks.isPresent()) {
-                cursorY = drawWrapped(graphics, QuestGuiText.timeRemainingLabel(quest, remainingTicks.getAsLong(), cache.ticksPerGameDay()),
-                        x, cursorY, width, 0xFFFFAA00);
+            Component remainingLabel = remainingTicks.isPresent()
+                    ? QuestGuiText.timeRemainingLabel(quest, remainingTicks.getAsLong(), cache.ticksPerGameDay())
+                    : null;
+            if (limitLabel != null && remainingLabel != null
+                    && font.width(limitLabel) + font.width(remainingLabel) + GAP <= width) {
+                // The limit and the time left share one row: the limit on the left, the time left on the right.
+                if (isVisible(cursorY, LINE_HEIGHT)) {
+                    graphics.text(font, limitLabel, x, cursorY, 0xFFAAAAAA);
+                    graphics.text(font, remainingLabel, x + width - font.width(remainingLabel), cursorY, 0xFFFFAA00);
+                }
+                cursorY += LINE_HEIGHT;
+            } else {
+                if (limitLabel != null) {
+                    cursorY = drawWrapped(graphics, limitLabel, x, cursorY, width, 0xFFAAAAAA);
+                }
+                if (remainingLabel != null) {
+                    cursorY = drawWrapped(graphics, remainingLabel, x, cursorY, width, 0xFFFFAA00);
+                }
             }
-            cursorY = drawWrapped(graphics, QuestGuiText.retryLabel(failureRules), x, cursorY, width, 0xFF999999);
             Component failureReason = failureRules.reason().orElse(null);
             if (state == QuestState.FAILED && failureReason != null) {
                 cursorY = drawWrapped(graphics, failureReason, x, cursorY, width, 0xFFFF8888);
@@ -571,34 +612,72 @@ public final class QuestScreen extends Screen {
             graphics.fill(barX, thumbY, barX + 2, thumbY + thumbHeight, 0xFFAAAAAA);
         }
 
-        clipTop = footerTop;
-        clipBottom = areaBottom;
-        graphics.fill(x, footerTop - 3, x + fullWidth, footerTop - 2, 0x40FFFFFF);
-        cursorY = footerTop;
-        cursorY = drawWrapped(graphics, Component.translatable("questapi.gui.rewards"), x, cursorY, width, 0xFFFFAA00);
-        for (QuestReward reward : quest.rewards()) {
-            cursorY = drawWrapped(graphics, Component.literal("- ").append(reward.describe()), x, cursorY, width, 0xFFDDDDDD);
-        }
-
-        Optional<ChoiceBlock> choices = choiceBlock(quest, state, progress);
-        if (choices.isPresent()) {
-            cursorY += 4;
-            cursorY = drawWrapped(graphics, choices.get().header(), x, cursorY, width, choices.get().headerColor());
-            for (Component line : choices.get().lines()) {
-                cursorY = drawWrapped(graphics, line, x, cursorY, width, 0xFFDDDDDD);
-            }
-        }
-
-        List<QuestReward> failureRewards = quest.failureRewards();
-        if (!failureRewards.isEmpty()) {
-            cursorY += 4;
-            cursorY = drawWrapped(graphics, Component.translatable("questapi.gui.failure_rewards"), x, cursorY, width, 0xFFFF8888);
-            for (QuestReward reward : failureRewards) {
-                cursorY = drawWrapped(graphics, Component.literal("- ").append(reward.describe()), x, cursorY, width, 0xFFDDDDDD);
-            }
-        }
         clipTop = Integer.MIN_VALUE;
         clipBottom = Integer.MAX_VALUE;
+
+        if (hasRewardsInfo(quest, state, progress)) {
+            drawRewardsRow(graphics, quest, state, progress, x, rewardsRowY(), fullWidth);
+        }
+    }
+
+    /**
+     * Whether the quest has anything to show under "Rewards": rewards, a reward choice or failure
+     * rewards.
+     */
+    private boolean hasRewardsInfo(Quest quest, QuestState state, QuestProgress progress) {
+        return !quest.rewards().isEmpty() || !quest.failureRewards().isEmpty()
+                || choiceBlock(quest, state, progress).isPresent();
+    }
+
+    /**
+     * The fixed "Rewards" row above the buttons. The rewards themselves are not listed in the panel:
+     * hovering the word opens a tooltip with them, which leaves the room to the description and the
+     * objectives.
+     */
+    private void drawRewardsRow(GuiGraphicsExtractor graphics, Quest quest, QuestState state, QuestProgress progress,
+                                int x, int rowY, int fullWidth) {
+        Component label = Component.translatable("questapi.gui.rewards").withStyle(style -> style.withUnderlined(true));
+        int labelWidth = font.width(label);
+        boolean hovered = lastMouseX >= x && lastMouseX < x + labelWidth
+                && lastMouseY >= rowY && lastMouseY < rowY + LINE_HEIGHT;
+        graphics.fill(x, rowY - 3, x + fullWidth, rowY - 2, 0x40FFFFFF);
+        graphics.text(font, label, x, rowY, hovered ? 0xFFFFD27F : 0xFFFFAA00);
+        if (hovered) {
+            graphics.setTooltipForNextFrame(font, rewardsTooltip(quest, state, progress), lastMouseX, lastMouseY);
+        }
+    }
+
+    /**
+     * The tooltip lines of the rewards row: the rewards, then the reward choice and the failure
+     * rewards if the quest has any.
+     */
+    private List<FormattedCharSequence> rewardsTooltip(Quest quest, QuestState state, QuestProgress progress) {
+        List<FormattedCharSequence> lines = new ArrayList<>();
+        if (!quest.rewards().isEmpty()) {
+            lines.addAll(font.split(coloured(Component.translatable("questapi.gui.rewards"), 0xFFAA00), REWARDS_TOOLTIP_WIDTH));
+            for (QuestReward reward : quest.rewards()) {
+                lines.addAll(font.split(Component.literal("- ").append(reward.describe()), REWARDS_TOOLTIP_WIDTH));
+            }
+        }
+        Optional<ChoiceBlock> choices = choiceBlock(quest, state, progress);
+        if (choices.isPresent()) {
+            lines.addAll(font.split(coloured(choices.get().header(), choices.get().headerColor()), REWARDS_TOOLTIP_WIDTH));
+            for (Component line : choices.get().lines()) {
+                lines.addAll(font.split(line, REWARDS_TOOLTIP_WIDTH));
+            }
+        }
+        List<QuestReward> failureRewards = quest.failureRewards();
+        if (!failureRewards.isEmpty()) {
+            lines.addAll(font.split(coloured(Component.translatable("questapi.gui.failure_rewards"), 0xFF8888), REWARDS_TOOLTIP_WIDTH));
+            for (QuestReward reward : failureRewards) {
+                lines.addAll(font.split(Component.literal("- ").append(reward.describe()), REWARDS_TOOLTIP_WIDTH));
+            }
+        }
+        return lines;
+    }
+
+    private static Component coloured(Component text, int rgb) {
+        return text.copy().withStyle(style -> style.withColor(rgb & 0xFFFFFF));
     }
 
     /**

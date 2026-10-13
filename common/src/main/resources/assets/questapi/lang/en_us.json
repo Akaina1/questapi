@@ -43,6 +43,8 @@
   "questapi.gui.action.abandon": "Abandon",
   "questapi.gui.action.track": "Track",
   "questapi.gui.action.untrack": "Untrack",
+  "questapi.gui.action.show_path": "Show Path",
+  "questapi.gui.action.hide_path": "Hide Path",
   "questapi.gui.action.deliver": "Deliver",
   "questapi.gui.action.deliver.tooltip": "Deliver items (%1$s remaining)",
   "questapi.gui.level_tag": "[Lv %s]",
