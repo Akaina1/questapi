@@ -63,6 +63,14 @@ public final class PlayerQuestData {
         return unlockSeen.add(questId);
     }
 
+    /**
+     * Forgets that the player was told {@code questId} unlocked, so the next unlock is announced
+     * again. Used when a quest is reset on purpose.
+     */
+    public void forgetUnlockSeen(Identifier questId) {
+        unlockSeen.remove(questId);
+    }
+
     public boolean hasSeenUnlock(Identifier questId) {
         return unlockSeen.contains(questId);
     }

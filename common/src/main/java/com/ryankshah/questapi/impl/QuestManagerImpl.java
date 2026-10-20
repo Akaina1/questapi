@@ -529,7 +529,8 @@ public final class QuestManagerImpl implements QuestManager {
             listener.onQuestFailed(player, quest);
         }
         if (quest.retryable()) {
-            resetQuest(player, questId);
+            // A failed retry is not a new discovery, so the unlock announcement is not repeated.
+            resetQuest(player, questId, false);
         } else {
             notifyQuestChanged(player, quest);
         }
@@ -623,8 +624,21 @@ public final class QuestManagerImpl implements QuestManager {
 
     @Override
     public void resetQuest(ServerPlayer player, Identifier questId) {
+        resetQuest(player, questId, true);
+    }
+
+    /**
+     * @param forgetUnlock whether the remembered unlock announcement is cleared too, so the
+     *                     "New quest available" toast and {@code onQuestUnlocked} fire again when the
+     *                     quest next becomes available (an explicit reset), or stay silent (a retry
+     *                     after failure)
+     */
+    private void resetQuest(ServerPlayer player, Identifier questId, boolean forgetUnlock) {
         PlayerQuestData data = dataFor(player);
         data.progress().remove(questId);
+        if (forgetUnlock) {
+            data.forgetUnlockSeen(questId);
+        }
         clockSamples.remove(new TimerKey(player.getUUID(), questId));
         markDirty();
         invalidateRuntime(player);
