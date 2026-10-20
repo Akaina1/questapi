@@ -157,6 +157,11 @@ public final class QuestNetworking {
         if (!DevConfig.showStartedToast()) {
             return;
         }
+        if (quest.autoActivate() && quest.forcesUnlockedToast()) {
+            // The "New quest available" toast that follows is the announcement; two toasts and two
+            // sounds in a row would be noise.
+            return;
+        }
         Services.NETWORK.sendToPlayer(player, new ClientboundQuestStartedPayload(
                 toastTitle(quest, QuestToastOverrides::started, "questapi.toast.quest_started.title"), quest.title()));
     }
@@ -187,7 +192,7 @@ public final class QuestNetworking {
     }
 
     public static void sendQuestUnlocked(ServerPlayer player, Quest quest) {
-        if (!DevConfig.showUnlockedToast()) {
+        if (!DevConfig.showUnlockedToast() && !quest.forcesUnlockedToast()) {
             return;
         }
         Services.NETWORK.sendToPlayer(player, new ClientboundQuestUnlockedPayload(quest.title()));

@@ -242,7 +242,8 @@ public final class QuestCodecs {
                 ComponentSerialization.CODEC.optionalFieldOf("started").forGetter(QuestToastOverrides::started),
                 ComponentSerialization.CODEC.optionalFieldOf("ready").forGetter(QuestToastOverrides::ready),
                 ComponentSerialization.CODEC.optionalFieldOf("completed").forGetter(QuestToastOverrides::completed),
-                ComponentSerialization.CODEC.optionalFieldOf("failed").forGetter(QuestToastOverrides::failed)
+                ComponentSerialization.CODEC.optionalFieldOf("failed").forGetter(QuestToastOverrides::failed),
+                Codec.BOOL.optionalFieldOf("show_unlocked", false).forGetter(QuestToastOverrides::showUnlocked)
         ).apply(instance, QuestToastOverrides::new));
     }
 

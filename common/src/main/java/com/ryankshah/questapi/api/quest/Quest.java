@@ -116,6 +116,14 @@ public final class Quest {
         return toastOverrides;
     }
 
+    /**
+     * Whether the "New quest available" toast shows for this quest whatever the global switch says
+     * ({@code toast_overrides.show_unlocked}).
+     */
+    public boolean forcesUnlockedToast() {
+        return toastOverrides.map(QuestToastOverrides::showUnlocked).orElse(false);
+    }
+
     public Component title() {
         return display.title();
     }
