@@ -128,21 +128,80 @@ public final class QuestScreen extends Screen {
     /** Height of the scrollable detail text as of the last frame, used to limit scrolling. */
     private int detailContentHeight;
 
+    /** Set while another screen draws this one inside itself, see {@link #embed}. */
+    private boolean embedded;
+    private int embedX;
+    private int embedY;
+    private int embedWidth;
+    private int embedHeight;
+    /** The screen to go back to after the abandon confirmation; this screen unless it is embedded. */
+    private Screen returnScreen;
+
     public QuestScreen() {
         super(Component.translatable("questapi.gui.title"));
     }
 
+    /**
+     * Opens the quest book. When a mod registered an opener through
+     * {@link ClientQuestHooks#setBookOpener}, that opener decides what opens (for example a menu that shows
+     * this panel as one of its tabs); otherwise the standalone screen opens.
+     */
     public static void open() {
+        Optional<Runnable> opener = ClientQuestHooks.bookOpener();
+        if (opener.isPresent()) {
+            opener.get().run();
+            return;
+        }
+        openStandalone();
+    }
+
+    /**
+     * Opens the quest book as its own screen, whatever opener is registered.
+     */
+    public static void openStandalone() {
         ClientQuestNetworking.requestSync();
         Minecraft.getInstance().gui.setScreen(new QuestScreen());
     }
 
+    /**
+     * Makes this panel draw and work inside an area of another screen instead of being a screen of its own.
+     * The host forwards what it receives: {@link #tick()}, {@link #extractRenderState}, the mouse methods
+     * ({@link #mouseClicked}, {@link #mouseReleased}, {@link #mouseDragged}, {@link #mouseScrolled}), and calls
+     * this again when its own size changes. The panel does not ask for a sync; the host does that through
+     * {@link ClientQuestNetworking#requestSync()}.
+     *
+     * @param host      the screen that shows the panel; it is the screen shown again after a confirmation
+     * @param x         left edge of the area
+     * @param y         top edge of the area
+     * @param width     width of the area
+     * @param height    height of the area
+     */
+    public void embed(Screen host, int x, int y, int width, int height) {
+        this.width = host.width;
+        this.height = host.height;
+        this.embedded = true;
+        this.embedX = x;
+        this.embedY = y;
+        this.embedWidth = width;
+        this.embedHeight = height;
+        this.returnScreen = host;
+        clearWidgets();
+        init();
+    }
+
     @Override
     protected void init() {
-        this.panelWidth = Math.min(460, this.width - 16);
-        this.panelHeight = Math.min(240, this.height - 16);
-        this.leftPos = (this.width - panelWidth) / 2;
-        this.topPos = (this.height - panelHeight) / 2;
+        if (embedded) {
+            this.panelWidth = embedWidth;
+            this.panelHeight = embedHeight;
+            this.leftPos = embedX;
+            this.topPos = embedY;
+        } else {
+            this.panelWidth = Math.min(460, this.width - 16);
+            this.panelHeight = Math.min(240, this.height - 16);
+            this.leftPos = (this.width - panelWidth) / 2;
+            this.topPos = (this.height - panelHeight) / 2;
+        }
 
         this.columnY = topPos + MARGIN + TAB_HEIGHT + MARGIN;
         this.columnHeight = topPos + panelHeight - MARGIN - columnY;
@@ -318,7 +377,7 @@ public final class QuestScreen extends Screen {
                     if (confirmed) {
                         ClientQuestNetworking.requestAbandonQuest(questId);
                     }
-                    minecraft.gui.setScreen(this);
+                    minecraft.gui.setScreen(returnScreen != null ? returnScreen : this);
                 },
                 Component.translatable("questapi.gui.abandon.confirm.title"),
                 Component.translatable("questapi.gui.abandon.confirm.message")));

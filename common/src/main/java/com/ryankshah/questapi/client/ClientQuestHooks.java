@@ -30,8 +30,25 @@ public final class ClientQuestHooks {
     }
 
     private static PathControl pathControl;
+    private static Runnable bookOpener;
 
     private ClientQuestHooks() {
+    }
+
+    /**
+     * Replaces what {@code QuestScreen.open()} does, which the quest key calls. A mod that shows the quest
+     * book inside its own menu registers the code that opens that menu here. Use
+     * {@code QuestScreen.openStandalone()} to get the plain screen anyway.
+     */
+    public static void setBookOpener(Runnable opener) {
+        bookOpener = opener;
+    }
+
+    /**
+     * The registered opener of the quest book, if any mod registered one.
+     */
+    public static Optional<Runnable> bookOpener() {
+        return Optional.ofNullable(bookOpener);
     }
 
     /**
